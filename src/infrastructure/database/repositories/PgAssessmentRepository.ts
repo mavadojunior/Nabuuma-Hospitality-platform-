@@ -140,21 +140,22 @@ export class PgAssessmentRepository implements AssessmentRepository {
             lc.organisation_id,
             lc.id,
             e.id,
-            $3,
             $4,
             $5,
             $6,
-            $7
+            $7,
+            $8
           FROM nabuuma.learner_competencies lc
           JOIN nabuuma.evidence_records e
-            ON e.id = $2
-           AND e.organisation_id = lc.organisation_id
-           AND e.learner_id = lc.learner_id
-          WHERE lc.id = $1
-            AND lc.organisation_id = $8
+            ON e.id = $3
+          WHERE lc.id = $2
+            AND lc.organisation_id = $1
+            AND e.organisation_id = lc.organisation_id
+            AND e.learner_id = lc.learner_id
             AND nabuuma.is_authorized_assessor(
               lc.organisation_id,
-              $3
+              $4,
+              lc.learner_id
             )
           RETURNING
             id,
@@ -168,6 +169,7 @@ export class PgAssessmentRepository implements AssessmentRepository {
             assessed_at
         `,
         [
+          this.context.organisationId,
           assessment.learnerCompetencyId,
           assessment.evidenceId,
           assessment.assessorId,
@@ -175,7 +177,6 @@ export class PgAssessmentRepository implements AssessmentRepository {
           assessment.assessmentVersion,
           assessment.notes ?? null,
           assessment.assessedAt,
-          this.context.organisationId,
         ],
       );
 
