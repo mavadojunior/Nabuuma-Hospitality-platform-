@@ -164,6 +164,19 @@ export interface Assessment {
   assessedAt: string;
 }
 
+export interface AuditEvent {
+  id: UUID;
+  organisationId: UUID;
+  actorUserId: UUID;
+  action: string;
+  entityType: string;
+  entityId?: UUID | null;
+  occurredAt: string;
+  correlationId?: UUID | null;
+  outcome: string;
+  metadata: Record<string, unknown>;
+}
+
 export interface KnowledgeNodeRepository {
   getById(id: UUID): Promise<KnowledgeNode | null>;
   listChildren(parentId: UUID): Promise<KnowledgeNode[]>;
@@ -239,4 +252,23 @@ export interface AssessmentRepository {
   create(
     assessment: Omit<Assessment, "id">,
   ): Promise<Assessment>;
+}
+
+export interface AuditRepository {
+  record(
+    event: Omit<AuditEvent, "id" | "occurredAt">,
+  ): Promise<AuditEvent>;
+  list(options?: {
+    action?: string;
+    entityType?: string;
+    outcome?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AuditEvent[]>;
+  findForEntity(
+    entityType: string,
+    entityId: UUID,
+    limit?: number,
+  ): Promise<AuditEvent[]>;
+  findByCorrelationId(correlationId: UUID): Promise<AuditEvent[]>;
 }
