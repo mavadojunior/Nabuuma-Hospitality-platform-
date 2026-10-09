@@ -6,10 +6,12 @@ SET LOCAL search_path = nabuuma, public;
 -- Migration: 00005_create_audit_events_ledger.sql
 -- Purpose:
 --   Create the append-only audit ledger used to record tenant-scoped business
---   events and user actions for later review, investigation, and compliance.
+--   events and user actions for later review and investigation.
 --
--- The ledger is intentionally append-only at the database boundary: no UPDATE or
--- DELETE policies are created here.
+-- NOTE:
+--   This file matches the authoritative schema already present in the validated
+--   local nabuuma_test database. The DB schema is treated as canonical because it
+--   has already been applied and verified in the live test environment.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS nabuuma.audit_events (
@@ -18,18 +20,20 @@ CREATE TABLE IF NOT EXISTS nabuuma.audit_events (
         REFERENCES nabuuma.organisations(id) ON DELETE CASCADE,
     actor_user_id UUID NOT NULL
         REFERENCES nabuuma.users(id) ON DELETE RESTRICT,
+    action TEXT NOT NULL,
     entity_type TEXT NOT NULL,
     entity_id UUID,
-    action TEXT NOT NULL,
-    details JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    correlation_id UUID,
+    outcome TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_events_org_time
-    ON nabuuma.audit_events (organisation_id, created_at DESC);
+    ON nabuuma.audit_events (organisation_id, occurred_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_audit_events_actor_time
-    ON nabuuma.audit_events (actor_user_id, created_at DESC);
+    ON nabuuma.audit_events (actor_user_id, occurred_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_audit_events_entity
     ON nabuuma.audit_events (entity_type, entity_id);
