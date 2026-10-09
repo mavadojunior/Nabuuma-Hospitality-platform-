@@ -20,6 +20,7 @@ export class PgTransactionManager {
     try {
       await client.query("BEGIN");
       transactionStarted = true;
+      await client.query("SET LOCAL ROLE nabuuma_app");
 
       /*
        * The RLS helper functions in 00001_init_competency_telemetry.sql
