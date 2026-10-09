@@ -1,7 +1,8 @@
 import type { Pool, PoolClient } from "pg";
-import type {
-  SecurityContext,
-  TokenClaims,
+import {
+  createSecurityContext,
+  type SecurityContext,
+  type TokenClaims,
 } from "../security/security";
 
 export interface PgExecutionContext {
@@ -11,15 +12,20 @@ export interface PgExecutionContext {
   readonly organisationId: string;
 }
 
+type SecurityInput = SecurityContext | TokenClaims;
+
 export class PgTransactionManager {
   constructor(private readonly pool: Pool) {}
 
   async withTransaction<T>(
-    security: SecurityContext,
+    security: SecurityInput,
     work: (context: PgExecutionContext) => Promise<T>,
   ): Promise<T> {
     const client = await this.pool.connect();
     let transactionStarted = false;
+
+    const runtimeSecurity: SecurityContext =
+      "claims" in security ? security : createSecurityContext(security, "request");
 
     try {
       await client.query("BEGIN");
@@ -32,14 +38,14 @@ export class PgTransactionManager {
             set_config('app.user_id', $1, true),
             set_config('app.organisation_id', $2, true)
         `,
-        [security.claims.subject, security.claims.organisationId],
+        [runtimeSecurity.claims.subject, runtimeSecurity.claims.organisationId],
       );
 
       const context: PgExecutionContext = {
         client,
-        security,
-        claims: security.claims,
-        organisationId: security.claims.organisationId,
+        security: runtimeSecurity,
+        claims: runtimeSecurity.claims,
+        organisationId: runtimeSecurity.claims.organisationId,
       };
 
       const result = await work(context);
