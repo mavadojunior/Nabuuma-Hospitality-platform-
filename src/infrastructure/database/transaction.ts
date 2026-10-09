@@ -1,9 +1,9 @@
 import type { Pool, PoolClient } from "pg";
-import type { TokenClaims } from "../security/security";
+import type { SecurityContext } from "../security/security";
 
 export interface PgExecutionContext {
   readonly client: PoolClient;
-  readonly claims: TokenClaims;
+  readonly security: SecurityContext;
   readonly organisationId: string;
 }
 
@@ -11,7 +11,7 @@ export class PgTransactionManager {
   constructor(private readonly pool: Pool) {}
 
   async withTransaction<T>(
-    claims: TokenClaims,
+    security: SecurityContext,
     work: (context: PgExecutionContext) => Promise<T>,
   ): Promise<T> {
     const client = await this.pool.connect();
@@ -20,6 +20,9 @@ export class PgTransactionManager {
     try {
       await client.query("BEGIN");
       transactionStarted = true;
+
+      // Restrict queries to the application database role.
+      await client.query("SET LOCAL ROLE nabuuma_app");
 
       /*
        * The RLS helper functions in 00001_init_competency_telemetry.sql
@@ -34,13 +37,13 @@ export class PgTransactionManager {
             set_config('app.user_id', $1, true),
             set_config('app.organisation_id', $2, true)
         `,
-        [claims.subject, claims.organisationId],
+        [security.userId, security.organisationId],
       );
 
       const context: PgExecutionContext = {
         client,
-        claims,
-        organisationId: claims.organisationId,
+        security,
+        organisationId: security.organisationId,
       };
 
       const result = await work(context);

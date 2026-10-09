@@ -213,7 +213,7 @@ export class PgCompetencyRepository implements CompetencyRepository {
       verifiedById: UUID;
     },
   ): Promise<LearnerCompetency> {
-    if (actorId !== this.context.claims.subject) {
+    if (actorId !== this.context.security.userId) {
       throw new DomainStateTransitionError(
         "The transition actor must match the authenticated database context.",
       );

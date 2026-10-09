@@ -107,7 +107,7 @@ export class PgAssessmentRepository implements AssessmentRepository {
      * This prevents one authenticated Trainer context from attributing
      * an assessment to another Trainer.
      */
-    if (assessment.assessorId !== this.context.claims.subject) {
+    if (assessment.assessorId !== this.context.security.userId) {
       throw new TenantBoundaryViolationError(
         "The assessor must match the authenticated database context.",
       );

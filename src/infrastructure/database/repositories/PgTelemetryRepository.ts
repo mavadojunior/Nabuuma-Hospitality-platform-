@@ -198,7 +198,7 @@ export class PgTelemetryRepository implements TelemetryRepository {
       throw new TenantBoundaryViolationError();
     }
 
-    if (observation.observedById !== this.context.claims.subject) {
+    if (observation.observedById !== this.context.security.userId) {
       throw new TenantBoundaryViolationError(
         "The telemetry observer must match the authenticated database context.",
       );
