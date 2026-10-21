@@ -16,7 +16,7 @@ const claims: TokenClaims = {
   scopeOrganisationIds: ["org-789"],
 };
 
-const security = createSecurityContext(claims, "request-abc");
+const security = createSecurityContext(claims, "33333333-3333-4333-8333-333333333333");
 
 function makeHarness() {
   const query = vi.fn(async (_sql: string, _values?: unknown[]) => ({}));

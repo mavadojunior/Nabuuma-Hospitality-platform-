@@ -13,19 +13,19 @@ describe("createSecurityContext", () => {
   };
 
   it("copies identity, roles, scopes, and correlation ID", () => {
-    const context = createSecurityContext(validClaims, "request-abc");
+    const context = createSecurityContext(validClaims, "33333333-3333-4333-8333-333333333333");
 
     expect(context).toEqual({
       userId: "user-123",
       organisationId: "org-456",
       roles: ["TRAINER"],
       scopeOrganisationIds: ["org-789"],
-      correlationId: "request-abc",
+      correlationId: "33333333-3333-4333-8333-333333333333",
     });
   });
 
   it("freezes the context and its arrays at runtime", () => {
-    const context = createSecurityContext(validClaims, "request-abc");
+    const context = createSecurityContext(validClaims, "33333333-3333-4333-8333-333333333333");
 
     expect(Object.isFrozen(context)).toBe(true);
     expect(Object.isFrozen(context.roles)).toBe(true);
@@ -43,7 +43,7 @@ describe("createSecurityContext", () => {
       scopeOrganisationIds: scopes,
     };
 
-    const context = createSecurityContext(claims, "request-abc");
+    const context = createSecurityContext(claims, "33333333-3333-4333-8333-333333333333");
     roles.push("LEARNER");
     scopes.push("org-999");
 
@@ -55,7 +55,7 @@ describe("createSecurityContext", () => {
     expect(() =>
       createSecurityContext(
         { ...validClaims, subject: "" },
-        "request-abc",
+        "33333333-3333-4333-8333-333333333333",
       ),
     ).toThrow("Verified claims must include a subject.");
   });
@@ -64,7 +64,7 @@ describe("createSecurityContext", () => {
     expect(() =>
       createSecurityContext(
         { ...validClaims, organisationId: "" },
-        "request-abc",
+        "33333333-3333-4333-8333-333333333333",
       ),
     ).toThrow("Verified claims must include an organisation.");
   });
@@ -73,7 +73,7 @@ describe("createSecurityContext", () => {
     expect(() =>
       createSecurityContext(
         { ...validClaims, roles: [] },
-        "request-abc",
+        "33333333-3333-4333-8333-333333333333",
       ),
     ).toThrow("Verified claims must include at least one role.");
   });
@@ -84,6 +84,13 @@ describe("createSecurityContext", () => {
     ).toThrow("A correlation ID is required.");
   });
 
+
+  it("rejects a non-UUID correlation ID", () => {
+    expect(() =>
+      createSecurityContext(validClaims, "request-abc"),
+    ).toThrow("A correlation ID must be a valid UUID.");
+  });
+
   it("rejects an unsupported role", () => {
     const claims = {
       ...validClaims,
@@ -91,7 +98,7 @@ describe("createSecurityContext", () => {
     };
 
     expect(() =>
-      createSecurityContext(claims, "request-abc"),
+      createSecurityContext(claims, "33333333-3333-4333-8333-333333333333"),
     ).toThrow("Verified claims contain an unsupported role.");
   });
 
@@ -102,7 +109,7 @@ describe("createSecurityContext", () => {
     };
 
     expect(() =>
-      createSecurityContext(claims, "request-abc"),
+      createSecurityContext(claims, "33333333-3333-4333-8333-333333333333"),
     ).toThrow("Verified claims contain an invalid organisation scope.");
   });
 });

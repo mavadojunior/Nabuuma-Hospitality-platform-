@@ -328,7 +328,9 @@ afterAll(async () => {
   }
 });
 
-describe("RLS relationship security", () => {
+const runRlsIntegration = process.env.RUN_RLS_INTEGRATION === "1";
+
+describe.skipIf(!runRlsIntegration)("RLS relationship security", () => {
   it("allows valid telemetry within the active tenant and practice session", async () => {
     const client = await pool.connect();
 

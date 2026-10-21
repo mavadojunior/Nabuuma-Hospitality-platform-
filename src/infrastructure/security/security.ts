@@ -33,6 +33,13 @@ export function createSecurityContext(
     throw new Error("A correlation ID is required.");
   }
 
+  const UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!UUID_PATTERN.test(correlationId)) {
+    throw new Error("A correlation ID must be a valid UUID.");
+  }
+
   const allowedRoles: readonly SecurityRole[] = [
     "LEARNER",
     "PROFESSIONAL",
