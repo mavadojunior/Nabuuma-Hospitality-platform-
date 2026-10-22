@@ -1,0 +1,53 @@
+import { AcademyCourseUnavailableError } from "../../application/academy";
+import {
+  DomainConstraintError,
+  TenantBoundaryViolationError,
+} from "../../domain/competency/errors";
+
+export interface HttpError {
+  readonly statusCode: number;
+  readonly body: {
+    readonly code: string;
+    readonly message: string;
+  };
+}
+
+export function mapHttpError(error: unknown): HttpError {
+  if (error instanceof AcademyCourseUnavailableError) {
+    return {
+      statusCode: 404,
+      body: {
+        code: "ACADEMY_COURSE_NOT_FOUND",
+        message: "The requested Academy course is unavailable.",
+      },
+    };
+  }
+
+  if (error instanceof TenantBoundaryViolationError) {
+    return {
+      statusCode: 403,
+      body: {
+        code: "FORBIDDEN",
+        message: "The requested operation is not permitted.",
+      },
+    };
+  }
+
+  if (error instanceof DomainConstraintError) {
+    return {
+      statusCode: 409,
+      body: {
+        code: "CONFLICT",
+        message: "The requested operation conflicts with existing state.",
+      },
+    };
+  }
+
+  return {
+    statusCode: 500,
+    body: {
+      code: "INTERNAL_ERROR",
+      message: "An unexpected error occurred.",
+    },
+  };
+}

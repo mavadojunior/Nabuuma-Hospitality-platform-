@@ -1,4 +1,8 @@
 import type { Pool } from "pg";
+import {
+  EnrolInAcademyCourseUseCase,
+  ListPublishedAcademyCoursesUseCase,
+} from "./application/academy";
 import { UpdateCompetencyStatusUseCase } from "./application/services/UpdateCompetencyStatusUseCase";
 import { SubmitEvidenceUseCase } from "./application/services/SubmitEvidenceUseCase";
 import { CreateAssessmentUseCase } from "./application/services/CreateAssessmentUseCase";
@@ -10,7 +14,13 @@ import type {
   PracticeSessionRepository,
 } from "./domain/competency/repositories/contracts";
 import { PgAuditRepository } from "./infrastructure/database/repositories/PgAuditRepository";
+import { PgAcademyRepository } from "./infrastructure/database/repositories/PgAcademyRepository";
 import { PgTransactionManager } from "./infrastructure/database/transaction";
+
+export interface AcademyApplicationServices {
+  readonly listPublishedAcademyCoursesUseCase: ListPublishedAcademyCoursesUseCase;
+  readonly enrolInAcademyCourseUseCase: EnrolInAcademyCourseUseCase;
+}
 
 export interface ApplicationServices {
   readonly updateCompetencyStatusUseCase: UpdateCompetencyStatusUseCase;
@@ -59,5 +69,27 @@ export function createApplicationServices(
       dependencies.practiceSessionRepository,
       makeAuditRepository,
     ),
+  };
+}
+
+
+export function createAcademyApplicationServices(
+  transactionManager: PgTransactionManager,
+): AcademyApplicationServices {
+  const makeAcademyRepository = (
+    context: ConstructorParameters<typeof PgAcademyRepository>[0],
+  ): PgAcademyRepository => new PgAcademyRepository(context);
+
+  return {
+    listPublishedAcademyCoursesUseCase:
+      new ListPublishedAcademyCoursesUseCase(
+        transactionManager,
+        makeAcademyRepository,
+      ),
+    enrolInAcademyCourseUseCase:
+      new EnrolInAcademyCourseUseCase(
+        transactionManager,
+        makeAcademyRepository,
+      ),
   };
 }
