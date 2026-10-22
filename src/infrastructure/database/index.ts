@@ -4,3 +4,4 @@ export * from "./repositories/PgCompetencyRepository";
 export * from "./repositories/PgTelemetryRepository";
 export * from "./repositories/PgAssessmentRepository";
 export * from "./repositories/PgAuditRepository";
+export * from "./repositories/PgAcademyRepository";
