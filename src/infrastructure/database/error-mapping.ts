@@ -36,7 +36,7 @@ function asPgError(error: unknown): PgErrorLike | null {
 
 export function mapPgError(
   error: unknown,
-  operation: "competency" | "telemetry" | "assessment" | "audit",
+  operation: "competency" | "telemetry" | "assessment" | "audit" | "academy",
 ): Error {
   const pgError = asPgError(error);
 
