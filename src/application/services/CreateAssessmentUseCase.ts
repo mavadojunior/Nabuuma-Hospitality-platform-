@@ -44,7 +44,7 @@ export class CreateAssessmentUseCase {
           assessorId: txContext.claims.subject,
           result: input.result,
           assessmentVersion: 1,
-          notes: input.notes,
+          ...(input.notes === undefined ? {} : { notes: input.notes }),
           assessedAt: new Date().toISOString(),
         });
 

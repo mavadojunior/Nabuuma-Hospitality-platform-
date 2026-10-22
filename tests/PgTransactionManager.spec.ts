@@ -3,11 +3,6 @@ import type { PoolClient } from "pg";
 import { PgTransactionManager } from "../src/infrastructure/database/transaction";
 import type { TokenClaims } from "../src/infrastructure/security/security";
 
-interface MockedPoolClient extends Partial<PoolClient> {
-  query: ReturnType<typeof vi.fn>;
-  release: ReturnType<typeof vi.fn>;
-}
-
 interface TestHarness {
   manager: PgTransactionManager;
   query: ReturnType<typeof vi.fn>;
@@ -16,12 +11,12 @@ interface TestHarness {
 
 function makeHarness(): TestHarness {
   const query = vi.fn(async () => ({}));
-  const release = vi.fn(async () => {});
+  const release = vi.fn((_error?: Error | boolean): void => {});
 
-  const client: MockedPoolClient = {
+  const client = {
     query,
     release,
-  };
+  } as unknown as PoolClient;
 
   const pool = {
     connect: vi.fn(async () => client),

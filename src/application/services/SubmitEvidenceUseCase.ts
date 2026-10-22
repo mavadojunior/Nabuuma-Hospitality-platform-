@@ -46,8 +46,12 @@ export class SubmitEvidenceUseCase {
           practiceSessionId: input.practiceSessionId,
           title: input.title,
           status: "SUBMITTED",
-          methodSummary: input.methodSummary,
-          reflection: input.reflection,
+          ...(input.methodSummary === undefined
+            ? {}
+            : { methodSummary: input.methodSummary }),
+          ...(input.reflection === undefined
+            ? {}
+            : { reflection: input.reflection }),
           artifactUri: input.evidenceUrl,
           metadata: {
             checksum: input.checksum,
