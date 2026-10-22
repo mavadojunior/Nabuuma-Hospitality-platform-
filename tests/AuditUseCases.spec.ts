@@ -32,7 +32,6 @@ function makeTxContext(): PgExecutionContext {
       subject: actorId,
       organisationId: orgId,
       roles: ["TRAINER"],
-      correlationId,
     },
     organisationId: orgId,
   };

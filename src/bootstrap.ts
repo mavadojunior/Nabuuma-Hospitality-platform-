@@ -34,8 +34,9 @@ export function createTransactionManager(pool: Pool): PgTransactionManager {
 export function createApplicationServices(
   dependencies: ApplicationServiceDependencies,
 ): ApplicationServices {
-  const makeAuditRepository = (context: Parameters<typeof PgAuditRepository>[0]) =>
-    new PgAuditRepository(context);
+  const makeAuditRepository = (
+    context: ConstructorParameters<typeof PgAuditRepository>[0],
+  ): PgAuditRepository => new PgAuditRepository(context);
 
   return {
     updateCompetencyStatusUseCase: new UpdateCompetencyStatusUseCase(
