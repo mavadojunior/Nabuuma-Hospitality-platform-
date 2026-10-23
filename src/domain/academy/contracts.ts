@@ -10,6 +10,18 @@ export interface AcademyCourse {
   readonly isPublished: boolean;
 }
 
+export interface AcademyLesson {
+  readonly id: UUID;
+  readonly organisationId: UUID;
+  readonly courseId: UUID;
+  readonly stableKey: string;
+  readonly title: string;
+  readonly content: Record<string, unknown>;
+  readonly sequenceNumber: number;
+  readonly estimatedDurationMinutes?: number;
+  readonly isPublished: boolean;
+}
+
 export type AcademyEnrolmentStatus =
   | "ACTIVE"
   | "COMPLETED"
@@ -23,6 +35,33 @@ export interface AcademyEnrolment {
   readonly status: AcademyEnrolmentStatus;
   readonly enrolledAt: string;
   readonly completedAt?: string;
+}
+
+export type AcademyLessonProgressStatus =
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "COMPLETED";
+
+export interface AcademyLessonProgress {
+  readonly id: UUID;
+  readonly organisationId: UUID;
+  readonly learnerId: UUID;
+  readonly courseId: UUID;
+  readonly enrolmentId: UUID;
+  readonly lessonId: UUID;
+  readonly status: AcademyLessonProgressStatus;
+  readonly progressPercent: number;
+  readonly startedAt?: string;
+  readonly completedAt?: string;
+  readonly lastActivityAt: string;
+}
+
+export interface SaveAcademyLessonProgressInput {
+  readonly courseId: UUID;
+  readonly enrolmentId: UUID;
+  readonly lessonId: UUID;
+  readonly status: AcademyLessonProgressStatus;
+  readonly progressPercent: number;
 }
 
 export interface AcademyRepository {
@@ -39,4 +78,17 @@ export interface AcademyRepository {
   getEnrolment(
     courseId: UUID,
   ): Promise<AcademyEnrolment | null>;
+
+  listPublishedLessons(
+    courseId: UUID,
+  ): Promise<AcademyLesson[]>;
+
+  getLessonProgress(
+    enrolmentId: UUID,
+    lessonId: UUID,
+  ): Promise<AcademyLessonProgress | null>;
+
+  saveLessonProgress(
+    input: SaveAcademyLessonProgressInput,
+  ): Promise<AcademyLessonProgress>;
 }
