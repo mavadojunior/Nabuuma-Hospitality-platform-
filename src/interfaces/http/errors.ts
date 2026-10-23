@@ -1,4 +1,5 @@
 import { AcademyCourseUnavailableError } from "../../application/academy";
+import { AuthenticationError } from "../../infrastructure/authentication/errors";
 import {
   DomainConstraintError,
   TenantBoundaryViolationError,
@@ -13,6 +14,16 @@ export interface HttpError {
 }
 
 export function mapHttpError(error: unknown): HttpError {
+  if (error instanceof AuthenticationError) {
+    return {
+      statusCode: 401,
+      body: {
+        code: "UNAUTHENTICATED",
+        message: "Authentication required.",
+      },
+    };
+  }
+
   if (error instanceof AcademyCourseUnavailableError) {
     return {
       statusCode: 404,

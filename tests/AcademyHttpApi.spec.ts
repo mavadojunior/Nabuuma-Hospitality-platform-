@@ -8,6 +8,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { AcademyApplicationServices } from "../src/bootstrap";
 import { AcademyCourseUnavailableError } from "../src/application/academy";
+import { AuthenticationError } from "../src/infrastructure/authentication/errors";
 import { createHttpApplication } from "../src/interfaces/http/app";
 import type { RequestAuthenticator } from "../src/interfaces/http/authentication";
 
@@ -169,7 +170,7 @@ describe("Academy HTTP API", () => {
 
   it("does not call the use case when authentication fails", async () => {
     const authenticate = vi.fn(async () => {
-      throw new Error("invalid bearer token");
+      throw new AuthenticationError();
     });
 
     const list = vi.fn();
@@ -183,10 +184,11 @@ describe("Academy HTTP API", () => {
       url: "/api/v1/academy/courses",
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(401);
     expect(list).not.toHaveBeenCalled();
-    expect(response.body).not.toContain(
-      "invalid bearer token",
-    );
+    expect(response.json()).toEqual({
+      code: "UNAUTHENTICATED",
+      message: "Authentication required.",
+    });
   });
 });
