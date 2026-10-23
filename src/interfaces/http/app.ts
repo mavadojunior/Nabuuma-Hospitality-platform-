@@ -17,6 +17,11 @@ export async function createHttpApplication(
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
+    ajv: {
+      customOptions: {
+        removeAdditional: false,
+      },
+    },
   });
 
   await registerAcademyRoutes(app, {
