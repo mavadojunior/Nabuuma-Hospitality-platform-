@@ -1,10 +1,21 @@
 import type { FastifyInstance } from "fastify";
 import type { AcademyApplicationServices } from "../../bootstrap";
+import type { AcademyLessonProgressStatus } from "../../domain/academy";
 import type { RequestAuthenticator } from "./authentication";
 import { mapHttpError } from "./errors";
 
 interface CourseParams {
   courseId: string;
+}
+
+interface LessonProgressParams extends CourseParams {
+  enrolmentId: string;
+  lessonId: string;
+}
+
+interface LessonProgressBody {
+  status: AcademyLessonProgressStatus;
+  progressPercent: number;
 }
 
 export interface AcademyRouteDependencies {
@@ -30,6 +41,86 @@ export async function registerAcademyRoutes(
 
         return reply.code(200).send({
           data: courses,
+        });
+      } catch (error) {
+        const mapped = mapHttpError(error);
+        return reply.code(mapped.statusCode).send(mapped.body);
+      }
+    },
+  );
+
+  app.get<{ Params: CourseParams }>(
+    "/api/v1/academy/courses/:courseId/lessons",
+    async (request, reply) => {
+      try {
+        const claims =
+          await dependencies.authenticator.authenticate(request);
+
+        const lessons =
+          await dependencies.services
+            .listAcademyLessonsUseCase
+            .execute(request.params.courseId, claims);
+
+        return reply.code(200).send({
+          data: lessons,
+        });
+      } catch (error) {
+        const mapped = mapHttpError(error);
+        return reply.code(mapped.statusCode).send(mapped.body);
+      }
+    },
+  );
+
+  app.put<{
+    Params: LessonProgressParams;
+    Body: LessonProgressBody;
+  }>(
+    "/api/v1/academy/courses/:courseId/enrolments/:enrolmentId/lessons/:lessonId/progress",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["status", "progressPercent"],
+          properties: {
+            status: {
+              type: "string",
+              enum: [
+                "NOT_STARTED",
+                "IN_PROGRESS",
+                "COMPLETED",
+              ],
+            },
+            progressPercent: {
+              type: "integer",
+              minimum: 0,
+              maximum: 100,
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const claims =
+          await dependencies.authenticator.authenticate(request);
+
+        const progress =
+          await dependencies.services
+            .updateAcademyLessonProgressUseCase
+            .execute(
+              {
+                courseId: request.params.courseId,
+                enrolmentId: request.params.enrolmentId,
+                lessonId: request.params.lessonId,
+                status: request.body.status,
+                progressPercent: request.body.progressPercent,
+              },
+              claims,
+            );
+
+        return reply.code(200).send({
+          data: progress,
         });
       } catch (error) {
         const mapped = mapHttpError(error);

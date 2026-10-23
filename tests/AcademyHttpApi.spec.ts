@@ -7,7 +7,10 @@ import {
 } from "vitest";
 import type { FastifyInstance } from "fastify";
 import type { AcademyApplicationServices } from "../src/bootstrap";
-import { AcademyCourseUnavailableError } from "../src/application/academy";
+import {
+  AcademyCourseUnavailableError,
+  InvalidAcademyLessonProgressError,
+} from "../src/application/academy";
 import { AuthenticationError } from "../src/infrastructure/authentication/errors";
 import { createHttpApplication } from "../src/interfaces/http/app";
 import type { RequestAuthenticator } from "../src/interfaces/http/authentication";
@@ -23,10 +26,16 @@ const apps: FastifyInstance[] = [];
 async function createHarness(overrides?: {
   list?: ReturnType<typeof vi.fn>;
   enrol?: ReturnType<typeof vi.fn>;
+  listLessons?: ReturnType<typeof vi.fn>;
+  updateProgress?: ReturnType<typeof vi.fn>;
   authenticate?: ReturnType<typeof vi.fn>;
 }) {
   const list = overrides?.list ?? vi.fn(async () => []);
   const enrol = overrides?.enrol ?? vi.fn();
+  const listLessons =
+    overrides?.listLessons ?? vi.fn(async () => []);
+  const updateProgress =
+    overrides?.updateProgress ?? vi.fn();
   const authenticate =
     overrides?.authenticate ?? vi.fn(async () => claims);
 
@@ -36,6 +45,12 @@ async function createHarness(overrides?: {
     },
     enrolInAcademyCourseUseCase: {
       execute: enrol,
+    },
+    listAcademyLessonsUseCase: {
+      execute: listLessons,
+    },
+    updateAcademyLessonProgressUseCase: {
+      execute: updateProgress,
     },
   } as unknown as AcademyApplicationServices;
 
@@ -54,6 +69,8 @@ async function createHarness(overrides?: {
     app,
     list,
     enrol,
+    listLessons,
+    updateProgress,
     authenticate,
   };
 }
@@ -144,6 +161,136 @@ describe("Academy HTTP API", () => {
       code: "ACADEMY_COURSE_NOT_FOUND",
       message: "The requested Academy course is unavailable.",
     });
+  });
+
+  it("returns published lessons using authenticated claims", async () => {
+    const lessons = [
+      {
+        id: "lesson-1",
+        organisationId: claims.organisationId,
+        courseId: "course-1",
+        stableKey: "espresso-basics",
+        title: "Espresso basics",
+        content: {},
+        sequenceNumber: 1,
+        isPublished: true,
+      },
+    ];
+
+    const listLessons = vi.fn(async () => lessons);
+    const h = await createHarness({ listLessons });
+
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/api/v1/academy/courses/course-1/lessons",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: lessons,
+    });
+
+    expect(h.authenticate).toHaveBeenCalledOnce();
+    expect(listLessons).toHaveBeenCalledWith(
+      "course-1",
+      claims,
+    );
+  });
+
+  it("updates lesson progress using authenticated identity", async () => {
+    const progress = {
+      id: "progress-1",
+      organisationId: claims.organisationId,
+      learnerId: claims.subject,
+      courseId: "course-1",
+      enrolmentId: "enrolment-1",
+      lessonId: "lesson-1",
+      status: "IN_PROGRESS",
+      progressPercent: 50,
+      lastActivityAt: "2026-10-22T00:00:00.000Z",
+    };
+
+    const updateProgress = vi.fn(async () => progress);
+    const h = await createHarness({ updateProgress });
+
+    const response = await h.app.inject({
+      method: "PUT",
+      url:
+        "/api/v1/academy/courses/course-1/" +
+        "enrolments/enrolment-1/lessons/lesson-1/progress",
+      payload: {
+        status: "IN_PROGRESS",
+        progressPercent: 50,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: progress,
+    });
+
+    expect(h.authenticate).toHaveBeenCalledOnce();
+
+    expect(updateProgress).toHaveBeenCalledWith(
+      {
+        courseId: "course-1",
+        enrolmentId: "enrolment-1",
+        lessonId: "lesson-1",
+        status: "IN_PROGRESS",
+        progressPercent: 50,
+      },
+      claims,
+    );
+  });
+
+  it("maps invalid lesson progress to 400", async () => {
+    const updateProgress = vi.fn(async () => {
+      throw new InvalidAcademyLessonProgressError();
+    });
+
+    const h = await createHarness({ updateProgress });
+
+    const response = await h.app.inject({
+      method: "PUT",
+      url:
+        "/api/v1/academy/courses/course-1/" +
+        "enrolments/enrolment-1/lessons/lesson-1/progress",
+      payload: {
+        status: "IN_PROGRESS",
+        progressPercent: 100,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      code: "INVALID_ACADEMY_LESSON_PROGRESS",
+      message:
+        "The Academy lesson progress transition is invalid.",
+    });
+  });
+
+  it("rejects identity injection in the progress request body", async () => {
+    const updateProgress = vi.fn();
+
+    const h = await createHarness({ updateProgress });
+
+    const response = await h.app.inject({
+      method: "PUT",
+      url:
+        "/api/v1/academy/courses/course-1/" +
+        "enrolments/enrolment-1/lessons/lesson-1/progress",
+      payload: {
+        status: "IN_PROGRESS",
+        progressPercent: 50,
+        organisationId: "attacker-org",
+        learnerId: "attacker-user",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+
+    expect(h.authenticate).not.toHaveBeenCalled();
+    expect(updateProgress).not.toHaveBeenCalled();
   });
 
   it("sanitises unexpected application failures", async () => {

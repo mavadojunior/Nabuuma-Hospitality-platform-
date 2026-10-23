@@ -1,4 +1,7 @@
-import { AcademyCourseUnavailableError } from "../../application/academy";
+import {
+  AcademyCourseUnavailableError,
+  InvalidAcademyLessonProgressError,
+} from "../../application/academy";
 import { AuthenticationError } from "../../infrastructure/authentication/errors";
 import {
   DomainConstraintError,
@@ -30,6 +33,16 @@ export function mapHttpError(error: unknown): HttpError {
       body: {
         code: "ACADEMY_COURSE_NOT_FOUND",
         message: "The requested Academy course is unavailable.",
+      },
+    };
+  }
+
+  if (error instanceof InvalidAcademyLessonProgressError) {
+    return {
+      statusCode: 400,
+      body: {
+        code: "INVALID_ACADEMY_LESSON_PROGRESS",
+        message: "The Academy lesson progress transition is invalid.",
       },
     };
   }
