@@ -314,13 +314,23 @@ async function cleanupFixtures(fixtures: Fixtures): Promise<void> {
   }
 }
 
+const runRlsIntegration = process.env.RUN_RLS_INTEGRATION === "1";
 let fixtures: Fixtures;
 
 beforeAll(async () => {
+  if (!runRlsIntegration) {
+    return;
+  }
+
   fixtures = await seedFixtures();
 });
 
 afterAll(async () => {
+  if (!runRlsIntegration) {
+    await pool.end();
+    return;
+  }
+
   try {
     await cleanupFixtures(fixtures);
   } finally {
