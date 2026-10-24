@@ -1,4 +1,5 @@
 import {
+  AcademyCertificateNotFoundError,
   AcademyCourseUnavailableError,
   InvalidAcademyLessonProgressError,
 } from "../../application/academy";
@@ -33,6 +34,16 @@ export function mapHttpError(error: unknown): HttpError {
       body: {
         code: "ACADEMY_COURSE_NOT_FOUND",
         message: "The requested Academy course is unavailable.",
+      },
+    };
+  }
+
+  if (error instanceof AcademyCertificateNotFoundError) {
+    return {
+      statusCode: 404,
+      body: {
+        code: "ACADEMY_CERTIFICATE_NOT_FOUND",
+        message: "The requested Academy certificate was not found.",
       },
     };
   }

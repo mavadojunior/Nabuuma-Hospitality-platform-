@@ -8,6 +8,10 @@ interface CourseParams {
   courseId: string;
 }
 
+interface CertificateParams {
+  certificateId: string;
+}
+
 interface LessonProgressParams extends CourseParams {
   enrolmentId: string;
   lessonId: string;
@@ -41,6 +45,53 @@ export async function registerAcademyRoutes(
 
         return reply.code(200).send({
           data: courses,
+        });
+      } catch (error) {
+        const mapped = mapHttpError(error);
+        return reply.code(mapped.statusCode).send(mapped.body);
+      }
+    },
+  );
+
+  app.get(
+    "/api/v1/academy/certificates",
+    async (request, reply) => {
+      try {
+        const claims =
+          await dependencies.authenticator.authenticate(request);
+
+        const certificates =
+          await dependencies.services
+            .listAcademyCertificatesUseCase
+            .execute(claims);
+
+        return reply.code(200).send({
+          data: certificates,
+        });
+      } catch (error) {
+        const mapped = mapHttpError(error);
+        return reply.code(mapped.statusCode).send(mapped.body);
+      }
+    },
+  );
+
+  app.get<{ Params: CertificateParams }>(
+    "/api/v1/academy/certificates/:certificateId",
+    async (request, reply) => {
+      try {
+        const claims =
+          await dependencies.authenticator.authenticate(request);
+
+        const certificate =
+          await dependencies.services
+            .getAcademyCertificateUseCase
+            .execute(
+              request.params.certificateId,
+              claims,
+            );
+
+        return reply.code(200).send({
+          data: certificate,
         });
       } catch (error) {
         const mapped = mapHttpError(error);

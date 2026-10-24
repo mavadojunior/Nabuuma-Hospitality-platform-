@@ -150,3 +150,90 @@ describe("PgAcademyRepository lesson progress", () => {
     ).rejects.toBeInstanceOf(DomainConstraintError);
   });
 });
+
+describe("PgAcademyRepository certificates", () => {
+  const certificateRow = {
+    id: "certificate-1",
+    organisation_id: organisationId,
+    learner_id: learnerId,
+    course_id: "course-1",
+    enrolment_id: "enrolment-1",
+    certificate_number: "NAB-TEST",
+    issued_at: new Date(
+      "2026-10-24T00:00:00.000Z",
+    ),
+    issued_by_id: null,
+    metadata: {
+      completion_source: "academy_course_completion",
+    },
+  };
+
+  it("lists only certificates owned by the execution context", async () => {
+    const h = repositoryWith([certificateRow]);
+
+    const certificates =
+      await h.repository.listCertificates();
+
+    const [sql, parameters] = h.query.mock.calls[0]!;
+
+    expect(sql).toContain(
+      "FROM nabuuma.academy_certificates",
+    );
+    expect(sql).toContain("organisation_id = $1");
+    expect(sql).toContain("learner_id = $2");
+
+    expect(parameters).toEqual([
+      organisationId,
+      learnerId,
+    ]);
+
+    expect(certificates).toEqual([
+      {
+        id: "certificate-1",
+        organisationId,
+        learnerId,
+        courseId: "course-1",
+        enrolmentId: "enrolment-1",
+        certificateNumber: "NAB-TEST",
+        issuedAt: "2026-10-24T00:00:00.000Z",
+        metadata: {
+          completion_source:
+            "academy_course_completion",
+        },
+      },
+    ]);
+  });
+
+  it("gets a certificate through tenant and learner ownership", async () => {
+    const h = repositoryWith([certificateRow]);
+
+    const certificate =
+      await h.repository.getCertificateById(
+        "certificate-1",
+      );
+
+    const [sql, parameters] = h.query.mock.calls[0]!;
+
+    expect(sql).toContain("organisation_id = $1");
+    expect(sql).toContain("learner_id = $2");
+    expect(sql).toContain("id = $3");
+
+    expect(parameters).toEqual([
+      organisationId,
+      learnerId,
+      "certificate-1",
+    ]);
+
+    expect(certificate?.id).toBe("certificate-1");
+  });
+
+  it("returns null when certificate ownership is not visible", async () => {
+    const h = repositoryWith([]);
+
+    await expect(
+      h.repository.getCertificateById(
+        "certificate-foreign",
+      ),
+    ).resolves.toBeNull();
+  });
+});

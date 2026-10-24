@@ -1,6 +1,8 @@
 import type { Pool } from "pg";
 import {
   EnrolInAcademyCourseUseCase,
+  GetAcademyCertificateUseCase,
+  ListAcademyCertificatesUseCase,
   ListAcademyLessonsUseCase,
   ListPublishedAcademyCoursesUseCase,
   UpdateAcademyLessonProgressUseCase,
@@ -24,6 +26,8 @@ export interface AcademyApplicationServices {
   readonly enrolInAcademyCourseUseCase: EnrolInAcademyCourseUseCase;
   readonly listAcademyLessonsUseCase: ListAcademyLessonsUseCase;
   readonly updateAcademyLessonProgressUseCase: UpdateAcademyLessonProgressUseCase;
+  readonly listAcademyCertificatesUseCase: ListAcademyCertificatesUseCase;
+  readonly getAcademyCertificateUseCase: GetAcademyCertificateUseCase;
 }
 
 export interface ApplicationServices {
@@ -102,6 +106,16 @@ export function createAcademyApplicationServices(
       ),
     updateAcademyLessonProgressUseCase:
       new UpdateAcademyLessonProgressUseCase(
+        transactionManager,
+        makeAcademyRepository,
+      ),
+    listAcademyCertificatesUseCase:
+      new ListAcademyCertificatesUseCase(
+        transactionManager,
+        makeAcademyRepository,
+      ),
+    getAcademyCertificateUseCase:
+      new GetAcademyCertificateUseCase(
         transactionManager,
         makeAcademyRepository,
       ),
