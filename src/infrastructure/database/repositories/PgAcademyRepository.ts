@@ -461,6 +461,49 @@ export class PgAcademyRepository implements AcademyRepository {
     }
   }
 
+  async completeCourse(
+    courseId: UUID,
+    enrolmentId: UUID,
+  ): Promise<AcademyCertificate> {
+    try {
+      const result =
+        await this.context.client.query<AcademyCertificateRow>(
+          `
+            SELECT
+              id,
+              organisation_id,
+              learner_id,
+              course_id,
+              enrolment_id,
+              certificate_number,
+              issued_at,
+              issued_by_id,
+              metadata
+            FROM nabuuma.complete_academy_course(
+              $1::uuid,
+              $2::uuid
+            )
+          `,
+          [
+            courseId,
+            enrolmentId,
+          ],
+        );
+
+      const row = result.rows[0];
+
+      if (!row) {
+        throw new Error(
+          "Academy course completion returned no certificate.",
+        );
+      }
+
+      return mapCertificate(row);
+    } catch (error) {
+      throw mapPgError(error, "academy");
+    }
+  }
+
   async listCertificates(): Promise<AcademyCertificate[]> {
     try {
       const result =

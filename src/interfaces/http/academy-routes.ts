@@ -12,8 +12,11 @@ interface CertificateParams {
   certificateId: string;
 }
 
-interface LessonProgressParams extends CourseParams {
+interface CourseEnrolmentParams extends CourseParams {
   enrolmentId: string;
+}
+
+interface LessonProgressParams extends CourseEnrolmentParams {
   lessonId: string;
 }
 
@@ -172,6 +175,32 @@ export async function registerAcademyRoutes(
 
         return reply.code(200).send({
           data: progress,
+        });
+      } catch (error) {
+        const mapped = mapHttpError(error);
+        return reply.code(mapped.statusCode).send(mapped.body);
+      }
+    },
+  );
+
+  app.post<{ Params: CourseEnrolmentParams }>(
+    "/api/v1/academy/courses/:courseId/enrolments/:enrolmentId/completion",
+    async (request, reply) => {
+      try {
+        const claims =
+          await dependencies.authenticator.authenticate(request);
+
+        const certificate =
+          await dependencies.services
+            .completeAcademyCourseUseCase
+            .execute(
+              request.params.courseId,
+              request.params.enrolmentId,
+              claims,
+            );
+
+        return reply.code(200).send({
+          data: certificate,
         });
       } catch (error) {
         const mapped = mapHttpError(error);

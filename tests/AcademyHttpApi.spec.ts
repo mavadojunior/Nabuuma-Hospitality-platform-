@@ -30,6 +30,7 @@ async function createHarness(overrides?: {
   updateProgress?: ReturnType<typeof vi.fn>;
   listCertificates?: ReturnType<typeof vi.fn>;
   getCertificate?: ReturnType<typeof vi.fn>;
+  completeCourse?: ReturnType<typeof vi.fn>;
   authenticate?: ReturnType<typeof vi.fn>;
 }) {
   const list = overrides?.list ?? vi.fn(async () => []);
@@ -42,6 +43,8 @@ async function createHarness(overrides?: {
     overrides?.listCertificates ?? vi.fn(async () => []);
   const getCertificate =
     overrides?.getCertificate ?? vi.fn();
+  const completeCourse =
+    overrides?.completeCourse ?? vi.fn();
   const authenticate =
     overrides?.authenticate ?? vi.fn(async () => claims);
 
@@ -64,6 +67,9 @@ async function createHarness(overrides?: {
     getAcademyCertificateUseCase: {
       execute: getCertificate,
     },
+    completeAcademyCourseUseCase: {
+      execute: completeCourse,
+    },
   } as unknown as AcademyApplicationServices;
 
   const authenticator = {
@@ -85,6 +91,7 @@ async function createHarness(overrides?: {
     updateProgress,
     listCertificates,
     getCertificate,
+    completeCourse,
     authenticate,
   };
 }
@@ -410,6 +417,44 @@ describe("Academy HTTP API", () => {
       code: "ACADEMY_CERTIFICATE_NOT_FOUND",
       message: "The requested Academy certificate was not found.",
     });
+  });
+
+  it("completes an enrolment using authenticated identity", async () => {
+    const certificate = {
+      id: "certificate-1",
+      organisationId: claims.organisationId,
+      learnerId: claims.subject,
+      courseId: "course-1",
+      enrolmentId: "enrolment-1",
+      certificateNumber: "NAB-TEST",
+      issuedAt: "2026-10-24T00:00:00.000Z",
+      metadata: {},
+    };
+
+    const completeCourse = vi.fn(async () => certificate);
+    const h = await createHarness({ completeCourse });
+
+    const response = await h.app.inject({
+      method: "POST",
+      url:
+        "/api/v1/academy/courses/course-1/" +
+        "enrolments/enrolment-1/completion",
+      payload: {
+        organisationId: "attacker-org",
+        learnerId: "attacker-user",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: certificate,
+    });
+
+    expect(completeCourse).toHaveBeenCalledWith(
+      "course-1",
+      "enrolment-1",
+      claims,
+    );
   });
 
   it("does not call the use case when authentication fails", async () => {

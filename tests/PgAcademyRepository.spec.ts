@@ -151,6 +151,54 @@ describe("PgAcademyRepository lesson progress", () => {
   });
 });
 
+describe("PgAcademyRepository completion", () => {
+  it("executes atomic Academy course completion", async () => {
+    const h = repositoryWith([
+      {
+        id: "certificate-1",
+        organisation_id: organisationId,
+        learner_id: learnerId,
+        course_id: "course-1",
+        enrolment_id: "enrolment-1",
+        certificate_number: "NAB-TEST",
+        issued_at: new Date("2026-10-24T00:00:00.000Z"),
+        issued_by_id: null,
+        metadata: {
+          completion_source: "academy_course_completion",
+        },
+      },
+    ]);
+
+    const certificate = await h.repository.completeCourse(
+      "course-1",
+      "enrolment-1",
+    );
+
+    const [sql, parameters] = h.query.mock.calls[0]!;
+
+    expect(sql).toContain(
+      "FROM nabuuma.complete_academy_course",
+    );
+    expect(parameters).toEqual([
+      "course-1",
+      "enrolment-1",
+    ]);
+
+    expect(certificate).toEqual({
+      id: "certificate-1",
+      organisationId,
+      learnerId,
+      courseId: "course-1",
+      enrolmentId: "enrolment-1",
+      certificateNumber: "NAB-TEST",
+      issuedAt: "2026-10-24T00:00:00.000Z",
+      metadata: {
+        completion_source: "academy_course_completion",
+      },
+    });
+  });
+});
+
 describe("PgAcademyRepository certificates", () => {
   const certificateRow = {
     id: "certificate-1",
