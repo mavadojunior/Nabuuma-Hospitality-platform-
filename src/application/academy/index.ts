@@ -4,3 +4,4 @@ export * from "./ListAcademyLessonsUseCase";
 export * from "./UpdateAcademyLessonProgressUseCase";
 export * from "./ListAcademyCertificatesUseCase";
 export * from "./GetAcademyCertificateUseCase";
+export * from "./CompleteAcademyCourseUseCase";

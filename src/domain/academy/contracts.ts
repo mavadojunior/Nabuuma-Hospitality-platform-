@@ -97,6 +97,11 @@ export interface AcademyRepository {
   getCertificateById(
     certificateId: UUID,
   ): Promise<AcademyCertificate | null>;
+
+  completeCourse(
+    courseId: UUID,
+    enrolmentId: UUID,
+  ): Promise<AcademyCertificate>;
 }
 
 export interface AcademyCertificate {
