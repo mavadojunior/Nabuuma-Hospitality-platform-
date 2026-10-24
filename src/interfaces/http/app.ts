@@ -6,10 +6,15 @@ import {
   registerAcademyRoutes,
 } from "./academy-routes";
 import type { RequestAuthenticator } from "./authentication";
+import {
+  registerCertificateVerificationRoutes,
+  type CertificateVerifier,
+} from "./certificate-verification-routes";
 
 export interface HttpApplicationDependencies {
   readonly academyServices: AcademyApplicationServices;
   readonly authenticator: RequestAuthenticator;
+  readonly certificateVerifier?: CertificateVerifier;
 }
 
 export async function createHttpApplication(
@@ -28,6 +33,13 @@ export async function createHttpApplication(
     services: dependencies.academyServices,
     authenticator: dependencies.authenticator,
   });
+
+  if (dependencies.certificateVerifier) {
+    await registerCertificateVerificationRoutes(
+      app,
+      dependencies.certificateVerifier,
+    );
+  }
 
   await app.ready();
 
