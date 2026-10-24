@@ -28,6 +28,8 @@ async function createHarness(overrides?: {
   enrol?: ReturnType<typeof vi.fn>;
   listLessons?: ReturnType<typeof vi.fn>;
   updateProgress?: ReturnType<typeof vi.fn>;
+  listCertificates?: ReturnType<typeof vi.fn>;
+  getCertificate?: ReturnType<typeof vi.fn>;
   authenticate?: ReturnType<typeof vi.fn>;
 }) {
   const list = overrides?.list ?? vi.fn(async () => []);
@@ -36,6 +38,10 @@ async function createHarness(overrides?: {
     overrides?.listLessons ?? vi.fn(async () => []);
   const updateProgress =
     overrides?.updateProgress ?? vi.fn();
+  const listCertificates =
+    overrides?.listCertificates ?? vi.fn(async () => []);
+  const getCertificate =
+    overrides?.getCertificate ?? vi.fn();
   const authenticate =
     overrides?.authenticate ?? vi.fn(async () => claims);
 
@@ -51,6 +57,12 @@ async function createHarness(overrides?: {
     },
     updateAcademyLessonProgressUseCase: {
       execute: updateProgress,
+    },
+    listAcademyCertificatesUseCase: {
+      execute: listCertificates,
+    },
+    getAcademyCertificateUseCase: {
+      execute: getCertificate,
     },
   } as unknown as AcademyApplicationServices;
 
@@ -71,6 +83,8 @@ async function createHarness(overrides?: {
     enrol,
     listLessons,
     updateProgress,
+    listCertificates,
+    getCertificate,
     authenticate,
   };
 }
@@ -312,6 +326,89 @@ describe("Academy HTTP API", () => {
     expect(response.json()).toEqual({
       code: "INTERNAL_ERROR",
       message: "An unexpected error occurred.",
+    });
+  });
+
+  it("lists learner certificates using authenticated claims", async () => {
+    const certificates = [
+      {
+        id: "certificate-1",
+        organisationId: claims.organisationId,
+        learnerId: claims.subject,
+        courseId: "course-1",
+        enrolmentId: "enrolment-1",
+        certificateNumber: "NAB-TEST",
+        issuedAt: "2026-10-24T00:00:00.000Z",
+        metadata: {},
+      },
+    ];
+
+    const listCertificates = vi.fn(async () => certificates);
+    const h = await createHarness({ listCertificates });
+
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/api/v1/academy/certificates",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: certificates,
+    });
+    expect(h.authenticate).toHaveBeenCalledOnce();
+    expect(listCertificates).toHaveBeenCalledWith(claims);
+  });
+
+  it("returns one learner certificate using authenticated claims", async () => {
+    const certificate = {
+      id: "certificate-1",
+      organisationId: claims.organisationId,
+      learnerId: claims.subject,
+      courseId: "course-1",
+      enrolmentId: "enrolment-1",
+      certificateNumber: "NAB-TEST",
+      issuedAt: "2026-10-24T00:00:00.000Z",
+      metadata: {},
+    };
+
+    const getCertificate = vi.fn(async () => certificate);
+    const h = await createHarness({ getCertificate });
+
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/api/v1/academy/certificates/certificate-1",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: certificate,
+    });
+    expect(getCertificate).toHaveBeenCalledWith(
+      "certificate-1",
+      claims,
+    );
+  });
+
+  it("maps a missing learner certificate to 404", async () => {
+    const {
+      AcademyCertificateNotFoundError,
+    } = await import("../src/application/academy");
+
+    const getCertificate = vi.fn(async () => {
+      throw new AcademyCertificateNotFoundError();
+    });
+
+    const h = await createHarness({ getCertificate });
+
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/api/v1/academy/certificates/missing",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      code: "ACADEMY_CERTIFICATE_NOT_FOUND",
+      message: "The requested Academy certificate was not found.",
     });
   });
 

@@ -1,4 +1,5 @@
 import type {
+  AcademyCertificate,
   AcademyCourse,
   AcademyEnrolment,
   AcademyLesson,
@@ -54,6 +55,18 @@ interface AcademyLessonProgressRow {
   started_at: Date | string | null;
   completed_at: Date | string | null;
   last_activity_at: Date | string;
+}
+
+interface AcademyCertificateRow {
+  id: string;
+  organisation_id: string;
+  learner_id: string;
+  course_id: string;
+  enrolment_id: string;
+  certificate_number: string;
+  issued_at: Date | string;
+  issued_by_id: string | null;
+  metadata: Record<string, unknown>;
 }
 
 function timestamp(value: Date | string): string {
@@ -124,6 +137,24 @@ function mapLessonProgress(
       ? {}
       : { completedAt: timestamp(row.completed_at) }),
     lastActivityAt: timestamp(row.last_activity_at),
+  };
+}
+
+function mapCertificate(
+  row: AcademyCertificateRow,
+): AcademyCertificate {
+  return {
+    id: row.id,
+    organisationId: row.organisation_id,
+    learnerId: row.learner_id,
+    courseId: row.course_id,
+    enrolmentId: row.enrolment_id,
+    certificateNumber: row.certificate_number,
+    issuedAt: timestamp(row.issued_at),
+    ...(row.issued_by_id === null
+      ? {}
+      : { issuedById: row.issued_by_id }),
+    metadata: row.metadata ?? {},
   };
 }
 
@@ -425,6 +456,75 @@ export class PgAcademyRepository implements AcademyRepository {
       }
 
       return mapLessonProgress(row);
+    } catch (error) {
+      throw mapPgError(error, "academy");
+    }
+  }
+
+  async listCertificates(): Promise<AcademyCertificate[]> {
+    try {
+      const result =
+        await this.context.client.query<AcademyCertificateRow>(
+          `
+            SELECT
+              id,
+              organisation_id,
+              learner_id,
+              course_id,
+              enrolment_id,
+              certificate_number,
+              issued_at,
+              issued_by_id,
+              metadata
+            FROM nabuuma.academy_certificates
+            WHERE organisation_id = $1
+              AND learner_id = $2
+            ORDER BY issued_at DESC, id ASC
+          `,
+          [
+            this.context.organisationId,
+            this.context.claims.subject,
+          ],
+        );
+
+      return result.rows.map(mapCertificate);
+    } catch (error) {
+      throw mapPgError(error, "academy");
+    }
+  }
+
+  async getCertificateById(
+    certificateId: UUID,
+  ): Promise<AcademyCertificate | null> {
+    try {
+      const result =
+        await this.context.client.query<AcademyCertificateRow>(
+          `
+            SELECT
+              id,
+              organisation_id,
+              learner_id,
+              course_id,
+              enrolment_id,
+              certificate_number,
+              issued_at,
+              issued_by_id,
+              metadata
+            FROM nabuuma.academy_certificates
+            WHERE organisation_id = $1
+              AND learner_id = $2
+              AND id = $3
+            LIMIT 1
+          `,
+          [
+            this.context.organisationId,
+            this.context.claims.subject,
+            certificateId,
+          ],
+        );
+
+      const row = result.rows[0];
+      return row ? mapCertificate(row) : null;
     } catch (error) {
       throw mapPgError(error, "academy");
     }

@@ -91,4 +91,22 @@ export interface AcademyRepository {
   saveLessonProgress(
     input: SaveAcademyLessonProgressInput,
   ): Promise<AcademyLessonProgress>;
+
+  listCertificates(): Promise<AcademyCertificate[]>;
+
+  getCertificateById(
+    certificateId: UUID,
+  ): Promise<AcademyCertificate | null>;
+}
+
+export interface AcademyCertificate {
+  readonly id: UUID;
+  readonly organisationId: UUID;
+  readonly learnerId: UUID;
+  readonly courseId: UUID;
+  readonly enrolmentId: UUID;
+  readonly certificateNumber: string;
+  readonly issuedAt: string;
+  readonly issuedById?: UUID;
+  readonly metadata: Record<string, unknown>;
 }
