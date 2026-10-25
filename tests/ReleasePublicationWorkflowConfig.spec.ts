@@ -119,6 +119,18 @@ describe("release publication workflow", () => {
     );
   });
 
+  it("uses the supported QEMU action major", async () => {
+    const content = await workflow();
+
+    expect(content).toContain(
+      "docker/setup-qemu-action@v4",
+    );
+
+    expect(content).not.toContain(
+      "docker/setup-qemu-action@v3",
+    );
+  });
+
   it("does not persist checkout credentials", async () => {
     const content = await workflow();
 
