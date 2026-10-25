@@ -191,27 +191,86 @@ jobs:
           printf '%s\n' "$manifest" |
             grep -F 'linux/arm64'
 
-      - name: Require patched GitHub CLI
+      - name: Install pinned GitHub CLI
         shell: bash
+        env:
+          GH_CLI_VERSION: "2.103.2"
         run: |
           set -euo pipefail
 
-          minimum="2.102.0"
-          current="$(
-            gh version --json version --jq '.version'
+          case "$RUNNER_ARCH" in
+            X64)
+              archive_arch="amd64"
+              ;;
+            ARM64)
+              archive_arch="arm64"
+              ;;
+            *)
+              printf '[ERROR] unsupported runner architecture: %s\n' \
+                "$RUNNER_ARCH" >&2
+              exit 1
+              ;;
+          esac
+
+          archive="gh_${GH_CLI_VERSION}_linux_${archive_arch}.tar.gz"
+          base_url="https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}"
+          workdir="$RUNNER_TEMP/gh-${GH_CLI_VERSION}"
+
+          mkdir -p "$workdir"
+
+          curl \
+            --fail \
+            --location \
+            --proto '=https' \
+            --tlsv1.2 \
+            --output "$workdir/$archive" \
+            "$base_url/$archive"
+
+          curl \
+            --fail \
+            --location \
+            --proto '=https' \
+            --tlsv1.2 \
+            --output "$workdir/checksums.txt" \
+            "$base_url/gh_${GH_CLI_VERSION}_checksums.txt"
+
+          expected="$(
+            awk -v file="$archive" \
+              '$2 == file { print $1 }' \
+              "$workdir/checksums.txt"
           )"
 
-          first="$(
-            printf '%s\n%s\n' "$minimum" "$current" |
-              sort -V |
-              head -n 1
-          )"
-
-          test "$first" = "$minimum" || {
-            printf '[ERROR] gh >= %s required, found %s\n' \
-              "$minimum" "$current" >&2
+          test -n "$expected" || {
+            printf '[ERROR] checksum missing for %s\n' \
+              "$archive" >&2
             exit 1
           }
+
+          actual="$(
+            sha256sum "$workdir/$archive" |
+              awk '{ print $1 }'
+          )"
+
+          test "$actual" = "$expected" || {
+            printf '[ERROR] checksum mismatch for %s\n' \
+              "$archive" >&2
+            exit 1
+          }
+
+          tar \
+            -xzf "$workdir/$archive" \
+            -C "$workdir"
+
+          install \
+            -m 0755 \
+            "$workdir/gh_${GH_CLI_VERSION}_linux_${archive_arch}/bin/gh" \
+            "$RUNNER_TEMP/gh"
+
+          test "$("$RUNNER_TEMP/gh" --version |
+            awk 'NR == 1 { print $3 }'
+          )" = "$GH_CLI_VERSION"
+
+          printf '%s\n' "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Verify GitHub provenance attestation
         shell: bash
