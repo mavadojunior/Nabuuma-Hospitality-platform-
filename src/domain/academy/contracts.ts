@@ -98,10 +98,21 @@ export interface AcademyRepository {
     certificateId: UUID,
   ): Promise<AcademyCertificate | null>;
 
+  revokeCertificate(
+    certificateNumber: string,
+    reason: string,
+  ): Promise<AcademyCertificateRevocation>;
+
   completeCourse(
     courseId: UUID,
     enrolmentId: UUID,
   ): Promise<AcademyCertificate>;
+}
+
+export interface AcademyCertificateRevocation {
+  readonly certificateNumber: string;
+  readonly revokedAt: string;
+  readonly newlyRevoked: boolean;
 }
 
 export interface AcademyCertificate {

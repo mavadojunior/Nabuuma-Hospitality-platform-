@@ -1,5 +1,6 @@
 import type {
   AcademyCertificate,
+  AcademyCertificateRevocation,
   AcademyCourse,
   AcademyEnrolment,
   AcademyLesson,
@@ -55,6 +56,12 @@ interface AcademyLessonProgressRow {
   started_at: Date | string | null;
   completed_at: Date | string | null;
   last_activity_at: Date | string;
+}
+
+interface AcademyCertificateRevocationRow {
+  certificate_number: string;
+  revoked_at: Date | string;
+  newly_revoked: boolean;
 }
 
 interface AcademyCertificateRow {
@@ -160,6 +167,47 @@ function mapCertificate(
 
 export class PgAcademyRepository implements AcademyRepository {
   constructor(private readonly context: PgExecutionContext) {}
+
+  async revokeCertificate(
+    certificateNumber: string,
+    reason: string,
+  ): Promise<AcademyCertificateRevocation> {
+    try {
+      const result =
+        await this.context.client.query<AcademyCertificateRevocationRow>(
+          `
+            SELECT
+              certificate_number,
+              revoked_at,
+              newly_revoked
+            FROM nabuuma.revoke_academy_certificate(
+              $1::text,
+              $2::text
+            )
+          `,
+          [
+            certificateNumber,
+            reason,
+          ],
+        );
+
+      const row = result.rows[0];
+
+      if (!row) {
+        throw new Error(
+          "Certificate revocation returned no row.",
+        );
+      }
+
+      return {
+        certificateNumber: row.certificate_number,
+        revokedAt: timestamp(row.revoked_at),
+        newlyRevoked: row.newly_revoked,
+      };
+    } catch (error) {
+      throw mapPgError(error, "academy");
+    }
+  }
 
   async listPublishedCourses(): Promise<AcademyCourse[]> {
     try {
