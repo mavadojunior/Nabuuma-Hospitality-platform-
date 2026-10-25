@@ -103,17 +103,29 @@ describe("post-release verification workflow", () => {
     );
   });
 
-  it("requires a patched GitHub CLI for attestation verification", async () => {
+  it("pins and verifies the GitHub CLI used for attestations", async () => {
     const content = await workflow();
 
     expect(content).toContain(
-      "minimum=\"2.102.0\"",
+      'GH_CLI_VERSION: "2.103.2"',
     );
     expect(content).toContain(
+      "gh_${GH_CLI_VERSION}_checksums.txt",
+    );
+    expect(content).toContain(
+      "sha256sum",
+    );
+    expect(content).toContain(
+      'test "$actual" = "$expected"',
+    );
+    expect(content).toContain(
+      'printf \'%s\\n\' "$RUNNER_TEMP" >> "$GITHUB_PATH"',
+    );
+    expect(content).not.toContain(
+      'minimum="2.102.0"',
+    );
+    expect(content).not.toContain(
       "gh version --json version",
-    );
-    expect(content).toContain(
-      "sort -V",
     );
   });
 
