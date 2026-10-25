@@ -6,3 +6,4 @@ export * from "./repositories/PgAssessmentRepository";
 export * from "./repositories/PgAuditRepository";
 export * from "./repositories/PgAcademyRepository";
 export * from "./PgCertificateVerifier";
+export * from "./PgReadinessProbe";
