@@ -5,6 +5,9 @@ import type {
 } from "../../domain/academy";
 import type { UUID } from "../../domain/competency/repositories/contracts";
 import type {
+  PgAuditRepository,
+} from "../../infrastructure/database/repositories/PgAuditRepository";
+import type {
   PgExecutionContext,
   PgTransactionManager,
 } from "../../infrastructure/database/transaction";
@@ -55,6 +58,9 @@ export class UpdateAcademyLessonProgressUseCase {
     private readonly repositoryFactory: (
       context: PgExecutionContext,
     ) => AcademyRepository,
+    private readonly auditRepositoryFactory: (
+      context: PgExecutionContext,
+    ) => PgAuditRepository,
   ) {}
 
   async execute(
@@ -83,7 +89,26 @@ export class UpdateAcademyLessonProgressUseCase {
           throw new InvalidAcademyLessonProgressError();
         }
 
-        return repository.saveLessonProgress(input);
+        const progress =
+          await repository.saveLessonProgress(input);
+
+        await this.auditRepositoryFactory(context).record({
+          organisationId: context.organisationId,
+          actorUserId: context.claims.subject,
+          action: "ACADEMY.LESSON_PROGRESS.UPDATE",
+          entityType: "ACADEMY_LESSON_PROGRESS",
+          entityId: progress.id,
+          outcome: "SUCCESS",
+          metadata: {
+            courseId: progress.courseId,
+            enrolmentId: progress.enrolmentId,
+            lessonId: progress.lessonId,
+            status: progress.status,
+            progressPercent: progress.progressPercent,
+          },
+        });
+
+        return progress;
       },
     );
   }

@@ -28,9 +28,17 @@ function harness(repository: AcademyRepository) {
     ),
   } as any;
 
+  const auditRepository = {
+    record: vi.fn(async () => undefined),
+  };
+
   return {
     transactionManager,
     repositoryFactory: vi.fn(() => repository),
+    auditRepository,
+    auditRepositoryFactory: vi.fn(
+      () => auditRepository,
+    ),
   };
 }
 
@@ -83,6 +91,7 @@ describe("Academy lesson progress use cases", () => {
         new UpdateAcademyLessonProgressUseCase(
           h.transactionManager,
           h.repositoryFactory,
+          h.auditRepositoryFactory as any,
         );
 
       await expect(
@@ -138,6 +147,7 @@ describe("Academy lesson progress use cases", () => {
         new UpdateAcademyLessonProgressUseCase(
           h.transactionManager,
           h.repositoryFactory,
+          h.auditRepositoryFactory as any,
         );
 
       await expect(
@@ -177,6 +187,7 @@ describe("Academy lesson progress use cases", () => {
       new UpdateAcademyLessonProgressUseCase(
         h.transactionManager,
         h.repositoryFactory,
+        h.auditRepositoryFactory as any,
       );
 
     await expect(
@@ -222,6 +233,7 @@ describe("Academy lesson progress use cases", () => {
       new UpdateAcademyLessonProgressUseCase(
         h.transactionManager,
         h.repositoryFactory,
+        h.auditRepositoryFactory as any,
       );
 
     await expect(
