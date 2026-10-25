@@ -11,6 +11,9 @@ import {
   AcademyCourseUnavailableError,
   InvalidAcademyLessonProgressError,
 } from "../src/application/academy";
+import {
+  DomainConstraintError,
+} from "../src/domain/competency/errors";
 import { AuthenticationError } from "../src/infrastructure/authentication/errors";
 import { createHttpApplication } from "../src/interfaces/http/app";
 import type { RequestAuthenticator } from "../src/interfaces/http/authentication";
@@ -31,6 +34,7 @@ async function createHarness(overrides?: {
   listCertificates?: ReturnType<typeof vi.fn>;
   getCertificate?: ReturnType<typeof vi.fn>;
   completeCourse?: ReturnType<typeof vi.fn>;
+  revokeCertificate?: ReturnType<typeof vi.fn>;
   authenticate?: ReturnType<typeof vi.fn>;
 }) {
   const list = overrides?.list ?? vi.fn(async () => []);
@@ -45,6 +49,8 @@ async function createHarness(overrides?: {
     overrides?.getCertificate ?? vi.fn();
   const completeCourse =
     overrides?.completeCourse ?? vi.fn();
+  const revokeCertificate =
+    overrides?.revokeCertificate ?? vi.fn();
   const authenticate =
     overrides?.authenticate ?? vi.fn(async () => claims);
 
@@ -70,6 +76,9 @@ async function createHarness(overrides?: {
     completeAcademyCourseUseCase: {
       execute: completeCourse,
     },
+    revokeAcademyCertificateUseCase: {
+      execute: revokeCertificate,
+    },
   } as unknown as AcademyApplicationServices;
 
   const authenticator = {
@@ -92,6 +101,7 @@ async function createHarness(overrides?: {
     listCertificates,
     getCertificate,
     completeCourse,
+    revokeCertificate,
     authenticate,
   };
 }
@@ -312,6 +322,131 @@ describe("Academy HTTP API", () => {
 
     expect(h.authenticate).not.toHaveBeenCalled();
     expect(updateProgress).not.toHaveBeenCalled();
+  });
+
+  it("revokes a certificate using authenticated claims", async () => {
+    const revocation = {
+      certificateNumber: "NAB-TEST",
+      revokedAt: "2026-10-25T05:00:00.000Z",
+      newlyRevoked: true,
+    };
+
+    const revokeCertificate = vi.fn(
+      async () => revocation,
+    );
+
+    const h = await createHarness({
+      revokeCertificate,
+    });
+
+    const response = await h.app.inject({
+      method: "POST",
+      url:
+        "/api/v1/academy/certificates/" +
+        "NAB-TEST/revocation",
+      payload: {
+        reason: "  Issued in error  ",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: revocation,
+    });
+
+    expect(h.authenticate).toHaveBeenCalledOnce();
+    expect(revokeCertificate).toHaveBeenCalledWith(
+      {
+        certificateNumber: "NAB-TEST",
+        reason: "Issued in error",
+      },
+      claims,
+    );
+  });
+
+  it("rejects malformed revocation requests before authentication", async () => {
+    const revokeCertificate = vi.fn();
+    const h = await createHarness({
+      revokeCertificate,
+    });
+
+    const response = await h.app.inject({
+      method: "POST",
+      url:
+        "/api/v1/academy/certificates/" +
+        "invalid_number/revocation",
+      payload: {
+        reason: "   ",
+        organisationId: "attacker-org",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(h.authenticate).not.toHaveBeenCalled();
+    expect(revokeCertificate).not.toHaveBeenCalled();
+  });
+
+  it("maps a rejected certificate revocation to conflict", async () => {
+    const revokeCertificate = vi.fn(async () => {
+      throw new DomainConstraintError(
+        "database detail must not leak",
+      );
+    });
+
+    const h = await createHarness({
+      revokeCertificate,
+    });
+
+    const response = await h.app.inject({
+      method: "POST",
+      url:
+        "/api/v1/academy/certificates/" +
+        "NAB-TEST/revocation",
+      payload: {
+        reason: "Issued in error",
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      code: "CONFLICT",
+      message:
+        "The requested operation conflicts with existing state.",
+    });
+
+    expect(response.body).not.toContain(
+      "database detail must not leak",
+    );
+  });
+
+  it("requires authentication for certificate revocation", async () => {
+    const authenticate = vi.fn(async () => {
+      throw new AuthenticationError();
+    });
+
+    const revokeCertificate = vi.fn();
+
+    const h = await createHarness({
+      authenticate,
+      revokeCertificate,
+    });
+
+    const response = await h.app.inject({
+      method: "POST",
+      url:
+        "/api/v1/academy/certificates/" +
+        "NAB-TEST/revocation",
+      payload: {
+        reason: "Issued in error",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      code: "UNAUTHENTICATED",
+      message: "Authentication required.",
+    });
+    expect(revokeCertificate).not.toHaveBeenCalled();
   });
 
   it("sanitises unexpected application failures", async () => {

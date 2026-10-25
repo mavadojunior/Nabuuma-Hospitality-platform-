@@ -12,6 +12,14 @@ interface CertificateParams {
   certificateId: string;
 }
 
+interface CertificateRevocationParams {
+  certificateNumber: string;
+}
+
+interface CertificateRevocationBody {
+  reason: string;
+}
+
 interface CourseEnrolmentParams extends CourseParams {
   enrolmentId: string;
 }
@@ -95,6 +103,68 @@ export async function registerAcademyRoutes(
 
         return reply.code(200).send({
           data: certificate,
+        });
+      } catch (error) {
+        const mapped = mapHttpError(error);
+        return reply.code(mapped.statusCode).send(mapped.body);
+      }
+    },
+  );
+
+  app.post<{
+    Params: CertificateRevocationParams;
+    Body: CertificateRevocationBody;
+  }>(
+    "/api/v1/academy/certificates/:certificateNumber/revocation",
+    {
+      schema: {
+        params: {
+          type: "object",
+          additionalProperties: false,
+          required: ["certificateNumber"],
+          properties: {
+            certificateNumber: {
+              type: "string",
+              pattern: "^NAB-[A-Za-z0-9-]+$",
+              minLength: 5,
+              maxLength: 200,
+            },
+          },
+        },
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["reason"],
+          properties: {
+            reason: {
+              type: "string",
+              minLength: 1,
+              maxLength: 1000,
+              pattern: ".*\\S.*",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const claims =
+          await dependencies.authenticator.authenticate(request);
+
+        const revocation =
+          await dependencies.services
+            .revokeAcademyCertificateUseCase
+            .execute(
+              {
+                certificateNumber:
+                  request.params.certificateNumber,
+                reason: request.body.reason.trim(),
+              },
+              claims,
+            );
+
+        return reply.code(200).send({
+          data: revocation,
         });
       } catch (error) {
         const mapped = mapHttpError(error);

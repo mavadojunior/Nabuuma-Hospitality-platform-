@@ -151,6 +151,54 @@ describe("PgAcademyRepository lesson progress", () => {
   });
 });
 
+describe("PgAcademyRepository certificate revocation", () => {
+  it("executes the database-authoritative revocation function", async () => {
+    const h = repositoryWith([
+      {
+        certificate_number: "NAB-TEST",
+        revoked_at: new Date(
+          "2026-10-25T05:00:00.000Z",
+        ),
+        newly_revoked: true,
+      },
+    ]);
+
+    const result = await h.repository.revokeCertificate(
+      "NAB-TEST",
+      "Issued in error",
+    );
+
+    const [sql, parameters] = h.query.mock.calls[0]!;
+
+    expect(sql).toContain(
+      "FROM nabuuma.revoke_academy_certificate",
+    );
+    expect(parameters).toEqual([
+      "NAB-TEST",
+      "Issued in error",
+    ]);
+
+    expect(result).toEqual({
+      certificateNumber: "NAB-TEST",
+      revokedAt: "2026-10-25T05:00:00.000Z",
+      newlyRevoked: true,
+    });
+  });
+
+  it("fails closed when revocation returns no row", async () => {
+    const h = repositoryWith([]);
+
+    await expect(
+      h.repository.revokeCertificate(
+        "NAB-TEST",
+        "Issued in error",
+      ),
+    ).rejects.toBeInstanceOf(
+      DomainConstraintError,
+    );
+  });
+});
+
 describe("PgAcademyRepository completion", () => {
   it("executes atomic Academy course completion", async () => {
     const h = repositoryWith([

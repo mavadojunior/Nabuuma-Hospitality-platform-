@@ -6,6 +6,7 @@ import {
   ListAcademyCertificatesUseCase,
   ListAcademyLessonsUseCase,
   ListPublishedAcademyCoursesUseCase,
+  RevokeAcademyCertificateUseCase,
   UpdateAcademyLessonProgressUseCase,
 } from "./application/academy";
 import { UpdateCompetencyStatusUseCase } from "./application/services/UpdateCompetencyStatusUseCase";
@@ -30,6 +31,7 @@ export interface AcademyApplicationServices {
   readonly listAcademyCertificatesUseCase: ListAcademyCertificatesUseCase;
   readonly getAcademyCertificateUseCase: GetAcademyCertificateUseCase;
   readonly completeAcademyCourseUseCase: CompleteAcademyCourseUseCase;
+  readonly revokeAcademyCertificateUseCase: RevokeAcademyCertificateUseCase;
 }
 
 export interface ApplicationServices {
@@ -123,6 +125,11 @@ export function createAcademyApplicationServices(
       ),
     completeAcademyCourseUseCase:
       new CompleteAcademyCourseUseCase(
+        transactionManager,
+        makeAcademyRepository,
+      ),
+    revokeAcademyCertificateUseCase:
+      new RevokeAcademyCertificateUseCase(
         transactionManager,
         makeAcademyRepository,
       ),
