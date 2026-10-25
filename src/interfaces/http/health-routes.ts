@@ -5,7 +5,7 @@ export interface ReadinessProbe {
 }
 
 export interface RuntimeHealthState {
-  isShuttingDown(): boolean;
+  isReady(): boolean;
 }
 
 export interface HealthRouteDependencies {
@@ -24,7 +24,7 @@ export async function registerHealthRoutes(
   );
 
   app.get("/health/ready", async (_request, reply) => {
-    if (dependencies.runtime.isShuttingDown()) {
+    if (!dependencies.runtime.isReady()) {
       return reply.code(503).send({
         status: "NOT_READY",
       });
@@ -33,12 +33,17 @@ export async function registerHealthRoutes(
     const databaseReady =
       await dependencies.readiness.isReady();
 
-    return reply
-      .code(databaseReady ? 200 : 503)
-      .send({
-        status: databaseReady
-          ? "READY"
-          : "NOT_READY",
+    if (
+      !databaseReady ||
+      !dependencies.runtime.isReady()
+    ) {
+      return reply.code(503).send({
+        status: "NOT_READY",
       });
+    }
+
+    return reply.code(200).send({
+      status: "READY",
+    });
   });
 }

@@ -22,8 +22,10 @@ async function createHarness(
   databaseReady: boolean,
   shuttingDown = false,
 ) {
-  const isReady = vi.fn(async () => databaseReady);
-  const isShuttingDown = vi.fn(() => shuttingDown);
+  const databaseIsReady =
+    vi.fn(async () => databaseReady);
+  const runtimeIsReady =
+    vi.fn(() => !shuttingDown);
 
   const app = await createHttpApplication({
     academyServices: {} as AcademyApplicationServices,
@@ -32,10 +34,10 @@ async function createHarness(
     } as unknown as RequestAuthenticator,
     health: {
       readiness: {
-        isReady,
+        isReady: databaseIsReady,
       },
       runtime: {
-        isShuttingDown,
+        isReady: runtimeIsReady,
       },
     },
   });
@@ -44,8 +46,8 @@ async function createHarness(
 
   return {
     app,
-    isReady,
-    isShuttingDown,
+    isReady: databaseIsReady,
+    runtimeIsReady,
   };
 }
 
