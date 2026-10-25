@@ -44,8 +44,8 @@ jobs:
       attestations: read
 
     steps:
-      - name: Resolve release identity
-        id: release
+      - name: Resolve automatic release identity
+        if: github.event_name == 'workflow_run'
         shell: bash
         env:
           RELEASE_TAG: ${{ github.event.workflow_run.head_branch }}
@@ -53,11 +53,46 @@ jobs:
         run: |
           set -euo pipefail
 
+          printf 'RELEASE_TAG=%s\n' "$RELEASE_TAG" >> "$GITHUB_ENV"
+          printf 'RELEASE_SHA=%s\n' "$RELEASE_SHA" >> "$GITHUB_ENV"
+
+      - name: Resolve manual release identity
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+
+          test -n "$RELEASE_TAG"
+          test -n "$RELEASE_SHA"
+
+          printf 'RELEASE_TAG=%s\n' "$RELEASE_TAG" >> "$GITHUB_ENV"
+          printf 'RELEASE_SHA=%s\n' "$RELEASE_SHA" >> "$GITHUB_ENV"
+
+      - name: Validate release identity
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -n "${RELEASE_TAG:-}"
+          test -n "${RELEASE_SHA:-}"
+
           if ! printf '%s\n' "$RELEASE_TAG" |
             grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
           then
             printf '[ERROR] unexpected release tag: %s\n' \
               "$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          if ! printf '%s\n' "$RELEASE_SHA" |
+            grep -Eq '^[0-9a-f]{40}$'
+          then
+            printf '[ERROR] invalid release SHA: %s\n' \
+              "$RELEASE_SHA" >&2
             exit 1
           fi
 
