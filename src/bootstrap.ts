@@ -131,6 +131,7 @@ export function createAcademyApplicationServices(
       new CompleteAcademyCourseUseCase(
         transactionManager,
         makeAcademyRepository,
+        makeAuditRepository,
       ),
     revokeAcademyCertificateUseCase:
       new RevokeAcademyCertificateUseCase(
