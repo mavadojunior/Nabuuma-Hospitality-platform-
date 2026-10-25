@@ -3,6 +3,9 @@ import type {
   AcademyRepository,
 } from "../../domain/academy";
 import type {
+  PgAuditRepository,
+} from "../../infrastructure/database/repositories/PgAuditRepository";
+import type {
   PgExecutionContext,
   PgTransactionManager,
 } from "../../infrastructure/database/transaction";
@@ -21,6 +24,9 @@ export class RevokeAcademyCertificateUseCase {
     private readonly repositoryFactory: (
       context: PgExecutionContext,
     ) => AcademyRepository,
+    private readonly auditRepositoryFactory: (
+      context: PgExecutionContext,
+    ) => PgAuditRepository,
   ) {}
 
   async execute(
@@ -29,11 +35,30 @@ export class RevokeAcademyCertificateUseCase {
   ): Promise<AcademyCertificateRevocation> {
     return this.transactionManager.withTransaction(
       claims,
-      async (context) =>
-        this.repositoryFactory(context).revokeCertificate(
-          input.certificateNumber,
-          input.reason,
-        ),
+      async (context) => {
+        const revocation =
+          await this.repositoryFactory(context)
+            .revokeCertificate(
+              input.certificateNumber,
+              input.reason,
+            );
+
+        await this.auditRepositoryFactory(context).record({
+          organisationId: context.organisationId,
+          actorUserId: context.claims.subject,
+          action: "CERTIFICATE.REVOKE",
+          entityType: "ACADEMY_CERTIFICATE",
+          outcome: "SUCCESS",
+          metadata: {
+            certificateNumber:
+              revocation.certificateNumber,
+            newlyRevoked:
+              revocation.newlyRevoked,
+          },
+        });
+
+        return revocation;
+      },
     );
   }
 }

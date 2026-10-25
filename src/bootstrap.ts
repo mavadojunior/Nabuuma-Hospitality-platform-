@@ -92,6 +92,10 @@ export function createAcademyApplicationServices(
     context: ConstructorParameters<typeof PgAcademyRepository>[0],
   ): PgAcademyRepository => new PgAcademyRepository(context);
 
+  const makeAuditRepository = (
+    context: ConstructorParameters<typeof PgAuditRepository>[0],
+  ): PgAuditRepository => new PgAuditRepository(context);
+
   return {
     listPublishedAcademyCoursesUseCase:
       new ListPublishedAcademyCoursesUseCase(
@@ -132,6 +136,7 @@ export function createAcademyApplicationServices(
       new RevokeAcademyCertificateUseCase(
         transactionManager,
         makeAcademyRepository,
+        makeAuditRepository,
       ),
   };
 }
