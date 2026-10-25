@@ -1,0 +1,202 @@
+name: Release Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Typecheck, Build, Unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Verify production artefact
+        run: |
+          set -euo pipefail
+          test -f dist/server.js
+          test ! -e dist/tests
+
+      - name: Run non-database test suite
+        run: npm run test:security
+
+  postgres-integration:
+    name: PostgreSQL RLS Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nabuuma_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nabuuma_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "55432"
+      PGDATABASE: nabuuma_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      RUN_RLS_INTEGRATION: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install PostgreSQL client
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply canonical migrations
+        run: |
+          set -euo pipefail
+
+          expected=1
+
+          for migration in db/migrations/*.sql; do
+            test -f "$migration"
+
+            filename="$(basename "$migration")"
+            prefix="$(printf '%05d' "$expected")"
+
+            case "$filename" in
+              "${prefix}"_*.sql) ;;
+              *)
+                printf '[ERROR] expected migration %s, found %s\n' \
+                  "$prefix" "$filename" >&2
+                exit 1
+                ;;
+            esac
+
+            printf '==> %s\n' "$migration"
+
+            psql \
+              -X \
+              -v ON_ERROR_STOP=1 \
+              -f "$migration"
+
+            expected=$((expected + 1))
+          done
+
+          test "$expected" -eq 10 || {
+            printf '[ERROR] expected migrations 00001..00009\n' >&2
+            exit 1
+          }
+
+      - name: Verify security roles
+        run: |
+          set -euo pipefail
+
+          result="$(
+            psql -X -v ON_ERROR_STOP=1 -Atc "
+              SELECT concat_ws(
+                '|',
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1
+                    FROM pg_roles
+                    WHERE rolname = 'nabuuma_app'
+                      AND NOT rolsuper
+                      AND NOT rolbypassrls
+                  )
+                  THEN 'APP_SAFE'
+                  ELSE 'APP_UNSAFE'
+                END,
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1
+                    FROM pg_roles
+                    WHERE rolname = 'nabuuma_certificate_verifier'
+                      AND NOT rolcanlogin
+                      AND NOT rolsuper
+                      AND NOT rolbypassrls
+                  )
+                  THEN 'VERIFIER_SAFE'
+                  ELSE 'VERIFIER_UNSAFE'
+                END
+              );
+            "
+          )"
+
+          test "$result" = "APP_SAFE|VERIFIER_SAFE"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run complete security suite
+        run: npm run test:security
+
+  container:
+    name: Production Container
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - quality
+      - postgres-integration
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: nabuuma-hospitality:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
