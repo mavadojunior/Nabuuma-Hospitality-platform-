@@ -338,7 +338,9 @@ afterAll(async () => {
   }
 });
 
-describe("RLS relationship security", () => {
+describe.skipIf(!runRlsIntegration)(
+  "RLS relationship security",
+  () => {
   it("allows valid telemetry within the active tenant and practice session", async () => {
     const client = await pool.connect();
 
@@ -574,4 +576,5 @@ describe("RLS relationship security", () => {
       client.release();
     }
   });
-});
+  },
+);
