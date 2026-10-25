@@ -117,6 +117,7 @@ export function createAcademyApplicationServices(
       new UpdateAcademyLessonProgressUseCase(
         transactionManager,
         makeAcademyRepository,
+        makeAuditRepository,
       ),
     listAcademyCertificatesUseCase:
       new ListAcademyCertificatesUseCase(
