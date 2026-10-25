@@ -127,8 +127,8 @@ jobs:
             expected=$((expected + 1))
           done
 
-          test "$expected" -eq 10 || {
-            printf '[ERROR] expected migrations 00001..00009\n' >&2
+          test "$expected" -eq 11 || {
+            printf '[ERROR] expected migrations 00001..00010\n' >&2
             exit 1
           }
 

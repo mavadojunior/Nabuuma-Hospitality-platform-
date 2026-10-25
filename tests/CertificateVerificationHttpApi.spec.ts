@@ -58,9 +58,11 @@ describe("Certificate verification HTTP API", () => {
   it("returns the privacy-safe verification projection without authentication", async () => {
     const verify = vi.fn(async () => ({
       valid: true,
+      status: "VALID" as const,
       certificateNumber: "NAB-TEST123",
       issuedAt: "2026-10-24T00:00:00.000Z",
       courseTitle: "Hospitality Foundations",
+      revokedAt: null,
     }));
 
     const h = await createHarness(verify);
@@ -76,9 +78,11 @@ describe("Certificate verification HTTP API", () => {
     expect(response.json()).toEqual({
       data: {
         valid: true,
+        status: "VALID",
         certificateNumber: "NAB-TEST123",
         issuedAt: "2026-10-24T00:00:00.000Z",
         courseTitle: "Hospitality Foundations",
+        revokedAt: null,
       },
     });
 
@@ -88,6 +92,44 @@ describe("Certificate verification HTTP API", () => {
     expect(response.body).not.toContain("learnerId");
     expect(response.body).not.toContain("organisationId");
     expect(response.body).not.toContain("enrolmentId");
+  });
+
+  it("returns the privacy-safe revoked projection", async () => {
+    const verify = vi.fn(async () => ({
+      valid: false,
+      status: "REVOKED" as const,
+      certificateNumber: "NAB-REVOKED123",
+      issuedAt: "2026-10-24T00:00:00.000Z",
+      courseTitle: "Hospitality Foundations",
+      revokedAt: "2026-10-25T00:00:00.000Z",
+    }));
+
+    const h = await createHarness(verify);
+
+    const response = await h.app.inject({
+      method: "GET",
+      url:
+        "/api/v1/academy/certificates/" +
+        "NAB-REVOKED123/verification",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      data: {
+        valid: false,
+        status: "REVOKED",
+        certificateNumber: "NAB-REVOKED123",
+        issuedAt: "2026-10-24T00:00:00.000Z",
+        courseTitle: "Hospitality Foundations",
+        revokedAt: "2026-10-25T00:00:00.000Z",
+      },
+    });
+
+    expect(response.body).not.toContain("reason");
+    expect(response.body).not.toContain("revokedBy");
+    expect(response.body).not.toContain("learnerId");
+    expect(response.body).not.toContain("organisationId");
+    expect(h.authenticate).not.toHaveBeenCalled();
   });
 
   it("returns a non-identifying invalid response for an unknown certificate", async () => {

@@ -35,9 +35,11 @@ describe.skipIf(!runIntegration)(
 
         expect(result.fields.map((field) => field.name)).toEqual([
           "valid",
+          "status",
           "certificate_number",
           "issued_at",
           "course_title",
+          "revoked_at",
         ]);
 
         expect(result.rows).toEqual([]);
