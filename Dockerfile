@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
+RUN --mount=type=cache,id=nabuuma-npm-build,target=/root/.npm,sharing=locked \
     npm ci
 
 
@@ -24,9 +24,8 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev && \
-    npm cache clean --force
+RUN --mount=type=cache,id=nabuuma-npm-production,target=/root/.npm,sharing=locked \
+    npm ci --omit=dev
 
 
 FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
