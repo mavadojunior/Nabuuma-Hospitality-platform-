@@ -76,11 +76,13 @@ describe("PgCertificateVerifier", () => {
     const h = createHarness([
       {
         valid: true,
+        status: "VALID",
         certificate_number: "NAB-TEST",
         issued_at: new Date(
           "2026-10-24T00:00:00.000Z",
         ),
         course_title: "Hospitality Foundations",
+        revoked_at: null,
         learner_id: "must-not-leak",
         organisation_id: "must-not-leak",
         enrolment_id: "must-not-leak",
@@ -91,9 +93,40 @@ describe("PgCertificateVerifier", () => {
       h.verifier.verify("NAB-TEST"),
     ).resolves.toEqual({
       valid: true,
+      status: "VALID",
       certificateNumber: "NAB-TEST",
       issuedAt: "2026-10-24T00:00:00.000Z",
       courseTitle: "Hospitality Foundations",
+      revokedAt: null,
+    });
+  });
+
+  it("maps a revoked certificate without leaking private revocation data", async () => {
+    const h = createHarness([
+      {
+        valid: false,
+        status: "REVOKED",
+        certificate_number: "NAB-REVOKED",
+        issued_at: "2026-10-24T00:00:00.000Z",
+        course_title: "Hospitality Foundations",
+        revoked_at: new Date(
+          "2026-10-25T00:00:00.000Z",
+        ),
+        reason: "must-not-leak",
+        revoked_by_id: "must-not-leak",
+        organisation_id: "must-not-leak",
+      },
+    ]);
+
+    await expect(
+      h.verifier.verify("NAB-REVOKED"),
+    ).resolves.toEqual({
+      valid: false,
+      status: "REVOKED",
+      certificateNumber: "NAB-REVOKED",
+      issuedAt: "2026-10-24T00:00:00.000Z",
+      courseTitle: "Hospitality Foundations",
+      revokedAt: "2026-10-25T00:00:00.000Z",
     });
   });
 

@@ -5,6 +5,26 @@ import {
 } from "vitest";
 import { readFile } from "node:fs/promises";
 
+describe("release migration gate", () => {
+  it("enforces the complete canonical migration lineage", async () => {
+    const workflow = await readFile(
+      new URL(
+        "../.github/workflows/release-gate.yml",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(workflow).toContain(
+      'test "$expected" -eq 11',
+    );
+
+    expect(workflow).toContain(
+      "expected migrations 00001..00010",
+    );
+  });
+});
+
 describe("production build configuration", () => {
   it("builds only runtime source into dist", async () => {
     const content = await readFile(

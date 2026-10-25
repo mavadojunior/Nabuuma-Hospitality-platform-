@@ -1,17 +1,25 @@
 import type { Pool } from "pg";
 
+export type CertificateVerificationStatus =
+  | "VALID"
+  | "REVOKED";
+
 export interface CertificateVerification {
   readonly valid: boolean;
+  readonly status: CertificateVerificationStatus;
   readonly certificateNumber: string;
   readonly issuedAt: string;
   readonly courseTitle: string;
+  readonly revokedAt: string | null;
 }
 
 interface CertificateVerificationRow {
   valid: boolean;
+  status: CertificateVerificationStatus;
   certificate_number: string;
   issued_at: Date | string;
   course_title: string;
+  revoked_at: Date | string | null;
 }
 
 function timestamp(value: Date | string): string {
@@ -42,9 +50,11 @@ export class PgCertificateVerifier {
           `
             SELECT
               valid,
+              status,
               certificate_number,
               issued_at,
-              course_title
+              course_title,
+              revoked_at
             FROM nabuuma.verify_academy_certificate($1::text)
           `,
           [certificateNumber],
@@ -61,9 +71,14 @@ export class PgCertificateVerifier {
 
       return {
         valid: row.valid,
+        status: row.status,
         certificateNumber: row.certificate_number,
         issuedAt: timestamp(row.issued_at),
         courseTitle: row.course_title,
+        revokedAt:
+          row.revoked_at === null
+            ? null
+            : timestamp(row.revoked_at),
       };
     } catch (error) {
       if (transactionStarted) {
