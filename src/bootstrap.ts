@@ -106,6 +106,7 @@ export function createAcademyApplicationServices(
       new EnrolInAcademyCourseUseCase(
         transactionManager,
         makeAcademyRepository,
+        makeAuditRepository,
       ),
     listAcademyLessonsUseCase:
       new ListAcademyLessonsUseCase(

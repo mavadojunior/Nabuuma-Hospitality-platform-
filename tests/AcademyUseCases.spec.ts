@@ -25,10 +25,16 @@ function harness(repository: AcademyRepository) {
     ),
   } as any;
 
+  const auditRepository = {
+    record: vi.fn(async () => undefined),
+  };
+
   return {
     context,
     transactionManager,
     repositoryFactory: vi.fn(() => repository),
+    auditRepository,
+    auditRepositoryFactory: vi.fn(() => auditRepository),
   };
 }
 
@@ -78,12 +84,14 @@ describe("Academy application use cases", () => {
     const useCase = new EnrolInAcademyCourseUseCase(
       h.transactionManager,
       h.repositoryFactory,
+      h.auditRepositoryFactory as any,
     );
 
     await expect(useCase.execute("course-1", claims)).resolves.toEqual(
       enrolment,
     );
     expect(repository.enrol).not.toHaveBeenCalled();
+    expect(h.auditRepository.record).not.toHaveBeenCalled();
   });
 
   it("creates an enrolment when none exists", async () => {
@@ -104,11 +112,31 @@ describe("Academy application use cases", () => {
     const useCase = new EnrolInAcademyCourseUseCase(
       h.transactionManager,
       h.repositoryFactory,
+      h.auditRepositoryFactory as any,
     );
 
     await useCase.execute("course-1", claims);
 
     expect(repository.enrol).toHaveBeenCalledWith("course-1");
+
+    expect(h.auditRepositoryFactory).toHaveBeenCalledOnce();
+    expect(h.auditRepositoryFactory).toHaveBeenCalledWith(
+      h.context,
+    );
+
+    expect(h.auditRepository.record).toHaveBeenCalledOnce();
+    expect(h.auditRepository.record).toHaveBeenCalledWith({
+      organisationId: claims.organisationId,
+      actorUserId: claims.subject,
+      action: "ACADEMY.ENROLMENT.CREATE",
+      entityType: "ACADEMY_ENROLMENT",
+      entityId: "enrolment-1",
+      outcome: "SUCCESS",
+      metadata: {
+        courseId: "course-1",
+        learnerId: claims.subject,
+      },
+    });
   });
 
   it("rejects unavailable curriculum before enrolment", async () => {
@@ -122,6 +150,7 @@ describe("Academy application use cases", () => {
     const useCase = new EnrolInAcademyCourseUseCase(
       h.transactionManager,
       h.repositoryFactory,
+      h.auditRepositoryFactory as any,
     );
 
     await expect(

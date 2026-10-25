@@ -4,6 +4,9 @@ import type {
 } from "../../domain/academy";
 import type { UUID } from "../../domain/competency/repositories/contracts";
 import type {
+  PgAuditRepository,
+} from "../../infrastructure/database/repositories/PgAuditRepository";
+import type {
   PgExecutionContext,
   PgTransactionManager,
 } from "../../infrastructure/database/transaction";
@@ -22,6 +25,9 @@ export class EnrolInAcademyCourseUseCase {
     private readonly repositoryFactory: (
       context: PgExecutionContext,
     ) => AcademyRepository,
+    private readonly auditRepositoryFactory: (
+      context: PgExecutionContext,
+    ) => PgAuditRepository,
   ) {}
 
   async execute(
@@ -43,7 +49,22 @@ export class EnrolInAcademyCourseUseCase {
           return existing;
         }
 
-        return repository.enrol(courseId);
+        const enrolment = await repository.enrol(courseId);
+
+        await this.auditRepositoryFactory(context).record({
+          organisationId: context.organisationId,
+          actorUserId: context.claims.subject,
+          action: "ACADEMY.ENROLMENT.CREATE",
+          entityType: "ACADEMY_ENROLMENT",
+          entityId: enrolment.id,
+          outcome: "SUCCESS",
+          metadata: {
+            courseId: enrolment.courseId,
+            learnerId: enrolment.learnerId,
+          },
+        });
+
+        return enrolment;
       },
     );
   }
