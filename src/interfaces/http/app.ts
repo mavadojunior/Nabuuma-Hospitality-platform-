@@ -7,6 +7,10 @@ import {
 } from "./academy-routes";
 import type { RequestAuthenticator } from "./authentication";
 import {
+  registerHealthRoutes,
+  type HealthRouteDependencies,
+} from "./health-routes";
+import {
   registerCertificateVerificationRoutes,
   type CertificateVerifier,
 } from "./certificate-verification-routes";
@@ -15,6 +19,7 @@ export interface HttpApplicationDependencies {
   readonly academyServices: AcademyApplicationServices;
   readonly authenticator: RequestAuthenticator;
   readonly certificateVerifier?: CertificateVerifier;
+  readonly health?: HealthRouteDependencies;
 }
 
 export async function createHttpApplication(
@@ -38,6 +43,13 @@ export async function createHttpApplication(
     await registerCertificateVerificationRoutes(
       app,
       dependencies.certificateVerifier,
+    );
+  }
+
+  if (dependencies.health) {
+    await registerHealthRoutes(
+      app,
+      dependencies.health,
     );
   }
 
