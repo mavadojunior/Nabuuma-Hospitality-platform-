@@ -35,6 +35,35 @@ describe("post-release verification workflow", () => {
     );
   });
 
+  it("resolves manual and automatic identities independently", async () => {
+    const content = await workflow();
+
+    expect(content).toContain(
+      "Resolve automatic release identity",
+    );
+    expect(content).toContain(
+      "${{ github.event.workflow_run.head_branch }}",
+    );
+    expect(content).toContain(
+      "${{ github.event.workflow_run.head_sha }}",
+    );
+    expect(content).toContain(
+      "Resolve manual release identity",
+    );
+    expect(content).toContain(
+      "${{ inputs.release_tag }}",
+    );
+    expect(content).toContain(
+      "${{ inputs.release_sha }}",
+    );
+    expect(content).toContain(
+      "Validate release identity",
+    );
+    expect(content).toContain(
+      "grep -Eq '^[0-9a-f]{40}$'",
+    );
+  });
+
   it("requires successful automatic publication", async () => {
     const content = await workflow();
 
