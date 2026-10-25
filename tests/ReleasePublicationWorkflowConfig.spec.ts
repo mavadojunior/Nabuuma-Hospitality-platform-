@@ -126,4 +126,59 @@ describe("release publication workflow", () => {
       content.match(/persist-credentials: false/g),
     ).toHaveLength(2);
   });
+
+  it("publishes the GitHub Release only after the image", async () => {
+    const content = await workflow();
+
+    expect(content).toContain(
+      "publish-release:",
+    );
+
+    expect(content).toContain(
+      "name: Publish GitHub Release",
+    );
+
+    expect(content).toContain(
+      "      - publish-image",
+    );
+
+    expect(content).toContain(
+      "contents: write",
+    );
+  });
+
+  it("creates release notes from the validated immutable tag", async () => {
+    const content = await workflow();
+
+    expect(content).toContain(
+      'gh release create "$RELEASE_TAG"',
+    );
+
+    expect(content).toContain(
+      "--verify-tag",
+    );
+
+    expect(content).toContain(
+      "--generate-notes",
+    );
+
+    expect(content).toContain(
+      "RELEASE_VERSION: ${{ needs.validate.outputs.version }}",
+    );
+  });
+
+  it("does not create a release before image attestation", async () => {
+    const content = await workflow();
+
+    const attestation = content.indexOf(
+      "Attest published image",
+    );
+
+    const release = content.indexOf(
+      "publish-release:",
+    );
+
+    expect(attestation).toBeGreaterThan(-1);
+    expect(release).toBeGreaterThan(attestation);
+  });
 });
