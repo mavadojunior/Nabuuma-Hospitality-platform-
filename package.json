@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test:security": "vitest run"
+    "test:security": "vitest run",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
