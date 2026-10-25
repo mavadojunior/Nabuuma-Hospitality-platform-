@@ -1,7 +1,7 @@
 import type {
   CompetencyTransitionPort,
-} from "../../domain/practice/engine/types";
-import type { CompetencyTransitionEngine } from "./CompetencyTransitionEngine";
+} from "../../domain/practice/engine/types.js";
+import type { CompetencyTransitionEngine } from "./CompetencyTransitionEngine.js";
 
 export class ScenarioCompetencyTransitionAdapter
   implements CompetencyTransitionPort

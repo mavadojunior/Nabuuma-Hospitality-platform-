@@ -7,10 +7,10 @@ import type {
   AcademyLessonProgress,
   AcademyRepository,
   SaveAcademyLessonProgressInput,
-} from "../../../domain/academy";
-import type { UUID } from "../../../domain/competency/repositories/contracts";
-import type { PgExecutionContext } from "../transaction";
-import { mapPgError } from "../error-mapping";
+} from "../../../domain/academy/index.js";
+import type { UUID } from "../../../domain/competency/repositories/contracts.js";
+import type { PgExecutionContext } from "../transaction.js";
+import { mapPgError } from "../error-mapping.js";
 
 interface AcademyCourseRow {
   id: string;

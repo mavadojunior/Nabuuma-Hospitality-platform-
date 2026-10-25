@@ -3,10 +3,10 @@ import {
   jwtVerify,
   type JWTVerifyGetKey,
 } from "jose";
-import type { TokenClaims } from "../security/security";
-import type { JwtAuthenticationConfig } from "./config";
-import { mapJwtPayloadToTokenClaims } from "./claims";
-import { AuthenticationError } from "./errors";
+import type { TokenClaims } from "../security/security.js";
+import type { JwtAuthenticationConfig } from "./config.js";
+import { mapJwtPayloadToTokenClaims } from "./claims.js";
+import { AuthenticationError } from "./errors.js";
 
 export interface AccessTokenVerifier {
   verify(token: string): Promise<TokenClaims>;

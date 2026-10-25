@@ -1,8 +1,8 @@
 import type { FastifyRequest } from "fastify";
-import type { TokenClaims } from "../security/security";
-import type { RequestAuthenticator } from "../../interfaces/http/authentication";
-import type { AccessTokenVerifier } from "./JoseJwtVerifier";
-import { AuthenticationError } from "./errors";
+import type { TokenClaims } from "../security/security.js";
+import type { RequestAuthenticator } from "../../interfaces/http/authentication.js";
+import type { AccessTokenVerifier } from "./JoseJwtVerifier.js";
+import { AuthenticationError } from "./errors.js";
 
 const BEARER_PATTERN = /^Bearer ([A-Za-z0-9\-._~+/]+=*)$/;
 

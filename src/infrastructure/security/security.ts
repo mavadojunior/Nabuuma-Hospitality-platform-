@@ -1,5 +1,5 @@
-import { UUID } from "../../domain/competency/repositories/contracts";
-import { AuthorizationError } from "../../application/services/errors";
+import { UUID } from "../../domain/competency/repositories/contracts.js";
+import { AuthorizationError } from "../../application/services/errors.js";
 
 export type SecurityRole =
   | "LEARNER"

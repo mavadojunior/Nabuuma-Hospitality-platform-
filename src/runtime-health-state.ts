@@ -1,6 +1,6 @@
 import type {
   RuntimeHealthState,
-} from "./interfaces/http/health-routes";
+} from "./interfaces/http/health-routes.js";
 
 export type RuntimeLifecycleState =
   | "STARTING"

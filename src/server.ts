@@ -1,4 +1,4 @@
-import { createRuntime } from "./runtime";
+import { createRuntime } from "./runtime.js";
 
 async function main(): Promise<void> {
   const runtime = await createRuntime();

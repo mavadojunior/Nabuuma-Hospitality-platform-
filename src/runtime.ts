@@ -3,35 +3,35 @@ import type { Pool } from "pg";
 import {
   createAcademyApplicationServices,
   createTransactionManager,
-} from "./bootstrap";
+} from "./bootstrap.js";
 import {
   closeDatabasePool,
   initializeDatabasePool,
-} from "./infrastructure/database/connection";
+} from "./infrastructure/database/connection.js";
 import {
   PgCertificateVerifier,
-} from "./infrastructure/database/PgCertificateVerifier";
+} from "./infrastructure/database/PgCertificateVerifier.js";
 import {
   PgReadinessProbe,
-} from "./infrastructure/database/PgReadinessProbe";
+} from "./infrastructure/database/PgReadinessProbe.js";
 import {
   BearerRequestAuthenticator,
   JoseJwtVerifier,
   loadJwtAuthenticationConfig,
-} from "./infrastructure/authentication";
+} from "./infrastructure/authentication/index.js";
 import {
   createHttpApplication,
-} from "./interfaces/http/app";
+} from "./interfaces/http/app.js";
 import {
   loadRuntimeConfig,
   type RuntimeConfig,
-} from "./runtime-config";
+} from "./runtime-config.js";
 import {
   RuntimeStateMachine,
-} from "./runtime-health-state";
+} from "./runtime-health-state.js";
 import {
   ServerLifecycle,
-} from "./server-lifecycle";
+} from "./server-lifecycle.js";
 
 export interface RuntimeProcess {
   readonly app: FastifyInstance;

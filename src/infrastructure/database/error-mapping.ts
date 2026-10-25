@@ -2,7 +2,7 @@ import {
   DomainConstraintError,
   DomainStateTransitionError,
   TenantBoundaryViolationError,
-} from "../../domain/competency/errors";
+} from "../../domain/competency/errors.js";
 
 interface PgErrorLike {
   code?: string;

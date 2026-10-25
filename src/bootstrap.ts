@@ -8,20 +8,20 @@ import {
   ListPublishedAcademyCoursesUseCase,
   RevokeAcademyCertificateUseCase,
   UpdateAcademyLessonProgressUseCase,
-} from "./application/academy";
-import { UpdateCompetencyStatusUseCase } from "./application/services/UpdateCompetencyStatusUseCase";
-import { SubmitEvidenceUseCase } from "./application/services/SubmitEvidenceUseCase";
-import { CreateAssessmentUseCase } from "./application/services/CreateAssessmentUseCase";
-import { RecordPracticeSessionUseCase } from "./application/services/RecordPracticeSessionUseCase";
+} from "./application/academy/index.js";
+import { UpdateCompetencyStatusUseCase } from "./application/services/UpdateCompetencyStatusUseCase.js";
+import { SubmitEvidenceUseCase } from "./application/services/SubmitEvidenceUseCase.js";
+import { CreateAssessmentUseCase } from "./application/services/CreateAssessmentUseCase.js";
+import { RecordPracticeSessionUseCase } from "./application/services/RecordPracticeSessionUseCase.js";
 import type {
   AssessmentRepository,
   CompetencyRepository,
   EvidenceRepository,
   PracticeSessionRepository,
-} from "./domain/competency/repositories/contracts";
-import { PgAuditRepository } from "./infrastructure/database/repositories/PgAuditRepository";
-import { PgAcademyRepository } from "./infrastructure/database/repositories/PgAcademyRepository";
-import { PgTransactionManager } from "./infrastructure/database/transaction";
+} from "./domain/competency/repositories/contracts.js";
+import { PgAuditRepository } from "./infrastructure/database/repositories/PgAuditRepository.js";
+import { PgAcademyRepository } from "./infrastructure/database/repositories/PgAcademyRepository.js";
+import { PgTransactionManager } from "./infrastructure/database/transaction.js";
 
 export interface AcademyApplicationServices {
   readonly listPublishedAcademyCoursesUseCase: ListPublishedAcademyCoursesUseCase;

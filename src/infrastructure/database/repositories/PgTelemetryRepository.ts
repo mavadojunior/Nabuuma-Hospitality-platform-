@@ -4,10 +4,10 @@ import type {
   TelemetryRepository,
   TelemetryValueType,
   UUID,
-} from "../../../domain/competency/repositories/contracts";
-import { TenantBoundaryViolationError } from "../../../domain/competency/errors";
-import type { PgExecutionContext } from "../transaction";
-import { mapPgError } from "../error-mapping";
+} from "../../../domain/competency/repositories/contracts.js";
+import { TenantBoundaryViolationError } from "../../../domain/competency/errors.js";
+import type { PgExecutionContext } from "../transaction.js";
+import { mapPgError } from "../error-mapping.js";
 
 interface TelemetryDefinitionRow {
   id: string;

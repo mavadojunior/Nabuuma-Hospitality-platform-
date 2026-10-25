@@ -2,16 +2,16 @@ import type {
   AcademyLessonProgress,
   AcademyLessonProgressStatus,
   AcademyRepository,
-} from "../../domain/academy";
-import type { UUID } from "../../domain/competency/repositories/contracts";
+} from "../../domain/academy/index.js";
+import type { UUID } from "../../domain/competency/repositories/contracts.js";
 import type {
   PgAuditRepository,
-} from "../../infrastructure/database/repositories/PgAuditRepository";
+} from "../../infrastructure/database/repositories/PgAuditRepository.js";
 import type {
   PgExecutionContext,
   PgTransactionManager,
-} from "../../infrastructure/database/transaction";
-import type { TokenClaims } from "../../infrastructure/security/security";
+} from "../../infrastructure/database/transaction.js";
+import type { TokenClaims } from "../../infrastructure/security/security.js";
 
 export class InvalidAcademyLessonProgressError extends Error {
   constructor() {

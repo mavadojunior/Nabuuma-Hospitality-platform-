@@ -3,7 +3,7 @@ import {
   createSecurityContext,
   type SecurityContext,
   type TokenClaims,
-} from "../security/security";
+} from "../security/security.js";
 
 export interface PgExecutionContext {
   readonly client: PoolClient;

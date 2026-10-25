@@ -1,13 +1,13 @@
 import type {
   AcademyLesson,
   AcademyRepository,
-} from "../../domain/academy";
-import type { UUID } from "../../domain/competency/repositories/contracts";
+} from "../../domain/academy/index.js";
+import type { UUID } from "../../domain/competency/repositories/contracts.js";
 import type {
   PgExecutionContext,
   PgTransactionManager,
-} from "../../infrastructure/database/transaction";
-import type { TokenClaims } from "../../infrastructure/security/security";
+} from "../../infrastructure/database/transaction.js";
+import type { TokenClaims } from "../../infrastructure/security/security.js";
 
 export class ListAcademyLessonsUseCase {
   constructor(

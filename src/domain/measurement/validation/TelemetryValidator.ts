@@ -1,5 +1,5 @@
-import { InvalidTelemetryBoundsError, ScenarioBoundaryViolationError } from "../../practice/engine/errors";
-import type { TelemetryPayload, TelemetryRule, TelemetryValue } from "./types";
+import { InvalidTelemetryBoundsError, ScenarioBoundaryViolationError } from "../../practice/engine/errors.js";
+import type { TelemetryPayload, TelemetryRule, TelemetryValue } from "./types.js";
 
 export interface TelemetryValidationResult {
   readonly normalized: TelemetryPayload;

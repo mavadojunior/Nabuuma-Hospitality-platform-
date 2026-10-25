@@ -1,4 +1,4 @@
-import type { UUID } from "../competency/repositories/contracts";
+import type { UUID } from "../competency/repositories/contracts.js";
 
 export interface AcademyCourse {
   readonly id: UUID;

@@ -1,19 +1,19 @@
 import Fastify, {
   type FastifyInstance,
 } from "fastify";
-import type { AcademyApplicationServices } from "../../bootstrap";
+import type { AcademyApplicationServices } from "../../bootstrap.js";
 import {
   registerAcademyRoutes,
-} from "./academy-routes";
-import type { RequestAuthenticator } from "./authentication";
+} from "./academy-routes.js";
+import type { RequestAuthenticator } from "./authentication.js";
 import {
   registerHealthRoutes,
   type HealthRouteDependencies,
-} from "./health-routes";
+} from "./health-routes.js";
 import {
   registerCertificateVerificationRoutes,
   type CertificateVerifier,
-} from "./certificate-verification-routes";
+} from "./certificate-verification-routes.js";
 
 export interface HttpApplicationDependencies {
   readonly academyServices: AcademyApplicationServices;

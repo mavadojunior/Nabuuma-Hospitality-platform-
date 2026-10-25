@@ -1,5 +1,5 @@
-import type { TokenClaims } from "../../../infrastructure/security/security";
-import type { TelemetryPayload, TelemetryRule } from "../../measurement/validation/types";
+import type { TokenClaims } from "../../../infrastructure/security/security.js";
+import type { TelemetryPayload, TelemetryRule } from "../../measurement/validation/types.js";
 
 export type DomainVertical = "COFFEE" | "MIXOLOGY" | "OPERATIONS";
 export type ScenarioDifficulty = "FOUNDATION" | "INTERMEDIATE" | "ADVANCED" | "EXPERT";

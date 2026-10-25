@@ -1,12 +1,12 @@
 import type {
   AcademyCourse,
   AcademyRepository,
-} from "../../domain/academy";
+} from "../../domain/academy/index.js";
 import type {
   PgExecutionContext,
   PgTransactionManager,
-} from "../../infrastructure/database/transaction";
-import type { TokenClaims } from "../../infrastructure/security/security";
+} from "../../infrastructure/database/transaction.js";
+import type { TokenClaims } from "../../infrastructure/security/security.js";
 
 export class ListPublishedAcademyCoursesUseCase {
   constructor(
