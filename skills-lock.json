@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "jwt-validate": {
+      "source": "jsonwebtoken/jwt-skills",
+      "sourceType": "github",
+      "skillPath": "jwt-validate/SKILL.md",
+      "computedHash": "165ddd0ad5a960266d6dca93b7b237a85c08e9d0e70d54ba0de6b7134dbfb605"
+    }
+  }
+}
