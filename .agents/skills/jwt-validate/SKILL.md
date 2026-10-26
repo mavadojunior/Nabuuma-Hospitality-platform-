@@ -31,10 +31,10 @@ Requires the user to provide a secret, PEM public key, or JWKS URI. Always pass 
 
 **Node.js** (preferred):
 
-First, ensure `jose` is available — install it globally if missing:
+First, use the project's existing, reviewed `jose` dependency. Do not install packages automatically. If `jose` is unavailable, stop and obtain explicit approval before changing dependencies.
 
 ```bash
-node --input-type=module -e "await import('jose')" 2>/dev/null || npm install -g jose
+node --input-type=module -e "await import('jose'); console.log('jose: available')"
 ```
 
 Then verify the token:
