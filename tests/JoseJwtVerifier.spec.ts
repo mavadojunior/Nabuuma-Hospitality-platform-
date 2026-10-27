@@ -153,4 +153,181 @@ describe("JoseJwtVerifier", () => {
       verifier.verify(token),
     ).rejects.toBeInstanceOf(AuthenticationError);
   });
+
+  it("rejects a token without a subject", async () => {
+    const { privateKey, publicKey } =
+      await generateKeyPair("RS256");
+
+    const verifier = new JoseJwtVerifier(
+      config,
+      async () => publicKey,
+    );
+
+    const token = await new SignJWT({
+      organisation_id: organisationId,
+      roles: ["LEARNER"],
+    })
+      .setProtectedHeader({ alg: "RS256" })
+      .setIssuer(config.issuer)
+      .setAudience(config.audience)
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey);
+
+    await expect(
+      verifier.verify(token),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+  });
+
+  it("rejects required temporal claim omissions", async () => {
+    const { privateKey, publicKey } =
+      await generateKeyPair("RS256");
+
+    const verifier = new JoseJwtVerifier(
+      config,
+      async () => publicKey,
+    );
+
+    const base = () =>
+      new SignJWT({
+        organisation_id: organisationId,
+        roles: ["LEARNER"],
+      })
+        .setProtectedHeader({ alg: "RS256" })
+        .setSubject(subject)
+        .setIssuer(config.issuer)
+        .setAudience(config.audience);
+
+    const withoutIssuedAt = await base()
+      .setExpirationTime("5m")
+      .sign(privateKey);
+
+    const withoutExpiration = await base()
+      .setIssuedAt()
+      .sign(privateKey);
+
+    await expect(
+      verifier.verify(withoutIssuedAt),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+
+    await expect(
+      verifier.verify(withoutExpiration),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+  });
+
+  it.each([
+    {
+      name: "empty roles",
+      roles: [],
+    },
+    {
+      name: "unsupported role",
+      roles: ["ADMIN"],
+    },
+    {
+      name: "mixed trusted and unsupported roles",
+      roles: ["LEARNER", "ADMIN"],
+    },
+  ])("rejects $name", async ({ roles }) => {
+    const h = await createHarness();
+
+    await expect(
+      h.verifier.verify(
+        await h.sign({ roles }),
+      ),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+  });
+
+  it("deduplicates trusted application roles", async () => {
+    const h = await createHarness();
+
+    await expect(
+      h.verifier.verify(
+        await h.sign({
+          roles: [
+            "LEARNER",
+            "TRAINER",
+            "LEARNER",
+          ],
+        }),
+      ),
+    ).resolves.toEqual({
+      subject,
+      organisationId,
+      roles: ["LEARNER", "TRAINER"],
+    });
+  });
+
+  it.each([
+    "",
+    "   ",
+  ])(
+    "rejects an invalid organisation claim: %j",
+    async (invalidOrganisationId) => {
+      const h = await createHarness();
+
+      await expect(
+        h.verifier.verify(
+          await h.sign({
+            organisationId:
+              invalidOrganisationId,
+          }),
+        ),
+      ).rejects.toBeInstanceOf(AuthenticationError);
+    },
+  );
+
+  it("rejects an algorithm outside the configured allowlist", async () => {
+    const { privateKey, publicKey } =
+      await generateKeyPair("ES256");
+
+    const verifier = new JoseJwtVerifier(
+      config,
+      async () => publicKey,
+    );
+
+    const token = await new SignJWT({
+      organisation_id: organisationId,
+      roles: ["LEARNER"],
+    })
+      .setProtectedHeader({ alg: "ES256" })
+      .setSubject(subject)
+      .setIssuer(config.issuer)
+      .setAudience(config.audience)
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey);
+
+    await expect(
+      verifier.verify(token),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+  });
+
+  it("rejects a token before its not-before time", async () => {
+    const { privateKey, publicKey } =
+      await generateKeyPair("RS256");
+
+    const verifier = new JoseJwtVerifier(
+      config,
+      async () => publicKey,
+    );
+
+    const token = await new SignJWT({
+      organisation_id: organisationId,
+      roles: ["LEARNER"],
+    })
+      .setProtectedHeader({ alg: "RS256" })
+      .setSubject(subject)
+      .setIssuer(config.issuer)
+      .setAudience(config.audience)
+      .setIssuedAt()
+      .setNotBefore("5m")
+      .setExpirationTime("10m")
+      .sign(privateKey);
+
+    await expect(
+      verifier.verify(token),
+    ).rejects.toBeInstanceOf(AuthenticationError);
+  });
+
 });
