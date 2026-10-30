@@ -258,34 +258,15 @@ access_token="$(
 test -n "$access_token" ||
   fail "access token is empty"
 
-TOKEN="$access_token" node <<'NODE'
+if ! TOKEN="$access_token" node --input-type=module <<'NODE'
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
 const token = process.env.TOKEN ?? "";
-const segments = token.split(".");
+const issuer = (process.env.AUTH_JWT_ISSUER ?? "").replace(/\/$/, "");
+const audience = process.env.AUTH_JWT_AUDIENCE ?? "";
+const jwksUri = process.env.AUTH_JWKS_URI ?? "";
 
-if (segments.length !== 3) {
-  throw new Error(
-    "Credential is not a compact three-segment JWT",
-  );
-}
-
-function decode(segment) {
-  return JSON.parse(
-    Buffer.from(segment, "base64url").toString("utf8"),
-  );
-}
-
-const header = decode(segments[0]);
-const payload = decode(segments[1]);
-const now = Math.floor(Date.now() / 1000);
-const audience = Array.isArray(payload.aud)
-  ? payload.aud
-  : [payload.aud];
-
-const acceptedAlgorithms = new Set([
-  "ES256",
-  "RS256",
-]);
-
+const acceptedAlgorithms = ["RS256", "ES256"];
 const acceptedRoles = new Set([
   "LEARNER",
   "PROFESSIONAL",
@@ -295,47 +276,92 @@ const acceptedRoles = new Set([
   "PLATFORM_ADMIN",
 ]);
 
-const checks = {
-  algorithm:
-    typeof header.alg === "string" &&
-    acceptedAlgorithms.has(header.alg),
-  issuer:
-    payload.iss === process.env.AUTH_JWT_ISSUER,
-  audience:
-    audience.includes(
-      process.env.AUTH_JWT_AUDIENCE,
-    ),
-  subject:
-    typeof payload.sub === "string" &&
-    payload.sub.length > 0,
-  issuedAt:
-    typeof payload.iat === "number",
-  expiry:
-    typeof payload.exp === "number" &&
-    payload.exp > now,
-  organisation:
-    typeof payload.organisation_id === "string" &&
-    payload.organisation_id.length > 0,
-  roles:
-    Array.isArray(payload.roles) &&
-    payload.roles.length > 0 &&
-    payload.roles.every(
-      (role) =>
-        typeof role === "string" &&
-        acceptedRoles.has(role),
-    ),
-};
+function requireHttpsUrl(value, name) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} is not a valid URL`);
+  }
 
-for (const [name, passed] of Object.entries(checks)) {
-  console.log(
-    `[${passed ? "PASS" : "FAIL"}] token ${name}`,
-  );
+  if (url.protocol !== "https:") {
+    throw new Error(`${name} must use HTTPS`);
+  }
+  return url;
 }
 
-if (!Object.values(checks).every(Boolean)) {
-  process.exit(2);
+try {
+  if (!token) {
+    throw new Error("access token is empty");
+  }
+  if (!issuer || !audience) {
+    throw new Error("JWT issuer or audience configuration is empty");
+  }
+
+  const jwksUrl = requireHttpsUrl(jwksUri, "AUTH_JWKS_URI");
+  requireHttpsUrl(issuer, "AUTH_JWT_ISSUER");
+
+  const JWKS = createRemoteJWKSet(jwksUrl);
+
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer,
+    audience,
+    algorithms: acceptedAlgorithms,
+    requiredClaims: [
+      "sub",
+      "exp",
+      "iat",
+      "organisation_id",
+      "roles",
+    ],
+  });
+
+  const checks = {
+    signature: true,
+    algorithm: true,
+    issuer: payload.iss === issuer,
+    audience: Array.isArray(payload.aud)
+      ? payload.aud.includes(audience)
+      : payload.aud === audience,
+    subject:
+      typeof payload.sub === "string" &&
+      payload.sub.trim().length > 0,
+    issuedAt:
+      typeof payload.iat === "number" &&
+      Number.isFinite(payload.iat),
+    expiry:
+      typeof payload.exp === "number" &&
+      payload.exp > Math.floor(Date.now() / 1000),
+    organisation:
+      typeof payload.organisation_id === "string" &&
+      payload.organisation_id.trim().length > 0,
+    roles:
+      Array.isArray(payload.roles) &&
+      payload.roles.length > 0 &&
+      payload.roles.every(
+        (role) =>
+          typeof role === "string" &&
+          acceptedRoles.has(role),
+      ),
+  };
+
+  for (const [name, passed] of Object.entries(checks)) {
+    console.log(`[${passed ? "PASS" : "FAIL"}] token ${name}`);
+  }
+
+  if (!Object.values(checks).every(Boolean)) {
+    process.exitCode = 2;
+  }
+} catch (error) {
+  console.error(
+    `[FAIL] JWT cryptographic verification (${error.code ?? error.name ?? "verification_error"})`,
+  );
+  process.exitCode = 2;
 }
 NODE
+then
+  fail "JWT preflight failed; authenticated request was not sent"
+fi
 
 set +e
 
