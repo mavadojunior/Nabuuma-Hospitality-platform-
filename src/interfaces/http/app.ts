@@ -14,12 +14,20 @@ import {
   registerCertificateVerificationRoutes,
   type CertificateVerifier,
 } from "./certificate-verification-routes.js";
+import {
+  createAuthHookPlugin,
+  type AccessTokenClaimsResolver,
+} from "./auth-hook-routes.js";
 
 export interface HttpApplicationDependencies {
   readonly academyServices: AcademyApplicationServices;
   readonly authenticator: RequestAuthenticator;
   readonly certificateVerifier?: CertificateVerifier;
   readonly health?: HealthRouteDependencies;
+  readonly authHook?: {
+    readonly secret: string;
+    readonly resolver: AccessTokenClaimsResolver;
+  };
 }
 
 export async function createHttpApplication(
@@ -50,6 +58,14 @@ export async function createHttpApplication(
     await registerHealthRoutes(
       app,
       dependencies.health,
+    );
+  }
+
+  if (dependencies.authHook) {
+    await app.register(
+      createAuthHookPlugin(
+        dependencies.authHook,
+      ),
     );
   }
 

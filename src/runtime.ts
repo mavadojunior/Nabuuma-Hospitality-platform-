@@ -17,6 +17,8 @@ import {
 import {
   BearerRequestAuthenticator,
   JoseJwtVerifier,
+  PgAccessTokenClaimsResolver,
+  loadAuthHookConfig,
   loadJwtAuthenticationConfig,
 } from "./infrastructure/authentication/index.js";
 import {
@@ -51,6 +53,8 @@ export async function createRuntime(
   const config = loadRuntimeConfig(environment);
   const jwtConfig =
     loadJwtAuthenticationConfig(environment);
+  const authHookConfig =
+    loadAuthHookConfig(environment);
 
   const initializePool =
     factories.initializePool ?? initializeDatabasePool;
@@ -68,6 +72,9 @@ export async function createRuntime(
         "PostgreSQL readiness probe failed during startup.",
       );
     }
+
+    const accessTokenClaimsResolver =
+      new PgAccessTokenClaimsResolver(pool);
 
     const transactionManager =
       createTransactionManager(pool);
@@ -92,6 +99,10 @@ export async function createRuntime(
       health: {
         readiness,
         runtime,
+      },
+      authHook: {
+        secret: authHookConfig.secret,
+        resolver: accessTokenClaimsResolver,
       },
     });
 
