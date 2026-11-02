@@ -19,6 +19,12 @@ import {
   JoseJwtVerifier,
   loadJwtAuthenticationConfig,
 } from "./infrastructure/authentication/index.js";
+import type {
+  AccessTokenVerifier,
+} from "./infrastructure/authentication/JoseJwtVerifier.js";
+import type {
+  JwtAuthenticationConfig,
+} from "./infrastructure/authentication/config.js";
 import {
   createHttpApplication,
 } from "./interfaces/http/app.js";
@@ -42,6 +48,9 @@ export interface RuntimeProcess {
 export interface RuntimeFactories {
   readonly initializePool?: () => Pool;
   readonly closePool?: () => Promise<void>;
+  readonly createVerifier?: (
+    config: JwtAuthenticationConfig,
+  ) => AccessTokenVerifier;
 }
 
 export async function createRuntime(
@@ -79,7 +88,8 @@ export async function createRuntime(
 
     const authenticator =
       new BearerRequestAuthenticator(
-        new JoseJwtVerifier(jwtConfig),
+        factories.createVerifier?.(jwtConfig) ??
+          new JoseJwtVerifier(jwtConfig),
       );
 
     const certificateVerifier =
