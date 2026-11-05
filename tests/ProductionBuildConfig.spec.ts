@@ -16,11 +16,15 @@ describe("release migration gate", () => {
     );
 
     expect(workflow).toContain(
-      'test "$expected" -eq 11',
+      "migration_count=",
     );
 
     expect(workflow).toContain(
-      "expected migrations 00001..00010",
+      'test "$expected" -eq "$((migration_count + 1))"',
+    );
+
+    expect(workflow).toContain(
+      "expected %s sequential migrations",
     );
   });
 });
