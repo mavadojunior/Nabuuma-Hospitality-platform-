@@ -16,13 +16,13 @@ async function main(): Promise<void> {
 
     try {
       await runtime.lifecycle.shutdown();
-      process.exitCode = 0;
+      process.exit(0);
     } catch (error) {
       console.error(
         `[runtime] ${signal} shutdown failed`,
         error,
       );
-      process.exitCode = 1;
+      process.exit(1);
     }
   };
 

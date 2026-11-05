@@ -14,6 +14,9 @@ import {
   registerCertificateVerificationRoutes,
   type CertificateVerifier,
 } from "./certificate-verification-routes.js";
+import {
+  registerMcpRoutes,
+} from "../mcp/mcp-routes.js";
 
 export interface HttpApplicationDependencies {
   readonly academyServices: AcademyApplicationServices;
@@ -35,6 +38,11 @@ export async function createHttpApplication(
   });
 
   await registerAcademyRoutes(app, {
+    services: dependencies.academyServices,
+    authenticator: dependencies.authenticator,
+  });
+
+  await registerMcpRoutes(app, {
     services: dependencies.academyServices,
     authenticator: dependencies.authenticator,
   });
