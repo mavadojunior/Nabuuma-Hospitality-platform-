@@ -90,12 +90,42 @@ const listLessons = vi.fn(async () => [
   },
 ]);
 
+const listCertificates = vi.fn(async () => [
+  {
+    id: "55555555-5555-4555-8555-555555555555",
+    organisationId: claims.organisationId,
+    learnerId: claims.subject,
+    courseId:
+      "33333333-3333-4333-8333-333333333333",
+    certificateNumber: "NAB-TEST-001",
+    issuedAt: new Date("2026-01-02T00:00:00.000Z"),
+  },
+]);
+
+const getCertificate = vi.fn(
+  async (certificateId: string) => ({
+    id: certificateId,
+    organisationId: claims.organisationId,
+    learnerId: claims.subject,
+    courseId:
+      "33333333-3333-4333-8333-333333333333",
+    certificateNumber: "NAB-TEST-001",
+    issuedAt: new Date("2026-01-02T00:00:00.000Z"),
+  }),
+);
+
 const services = {
   listPublishedAcademyCoursesUseCase: {
     execute: listCourses,
   },
   listAcademyLessonsUseCase: {
     execute: listLessons,
+  },
+  listAcademyCertificatesUseCase: {
+    execute: listCertificates,
+  },
+  getAcademyCertificateUseCase: {
+    execute: getCertificate,
   },
 } as unknown as AcademyApplicationServices;
 
@@ -352,7 +382,7 @@ describe("authenticated MCP HTTP transport", () => {
     expect(response.status).toBe(401);
   });
 
-  it("discovers the two Academy tools", async () => {
+  it("discovers the four read-only Academy tools", async () => {
     const response = await mcp({
       jsonrpc: "2.0",
       id: 1,
@@ -369,6 +399,8 @@ describe("authenticated MCP HTTP transport", () => {
     ).toEqual([
       "list_published_courses",
       "list_course_lessons",
+      "list_academy_certificates",
+      "get_academy_certificate",
     ]);
   });
 
@@ -445,6 +477,103 @@ describe("authenticated MCP HTTP transport", () => {
 
     expect(response.status).toBe(200);
     expect(listLessons).not.toHaveBeenCalled();
+
+    expect(
+      response.body.error ??
+        response.body.result?.isError,
+    ).toBeTruthy();
+  });
+
+  it("invokes list_academy_certificates with trusted claims", async () => {
+    listCertificates.mockClear();
+
+    const response = await mcp({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: {
+        name: "list_academy_certificates",
+        arguments: {},
+      },
+    }, "Bearer test-token");
+
+    expect(response.status).toBe(200);
+    expect(response.body.error).toBeUndefined();
+
+    expect(
+      listCertificates,
+    ).toHaveBeenCalledExactlyOnceWith(
+      claims,
+    );
+
+    const text =
+      response.body.result?.content?.[0]?.text;
+
+    expect(JSON.parse(text ?? "{}")).toMatchObject({
+      data: [{
+        organisationId: claims.organisationId,
+        certificateNumber: "NAB-TEST-001",
+      }],
+    });
+  });
+
+  it("invokes get_academy_certificate with a validated certificate identifier", async () => {
+    getCertificate.mockClear();
+
+    const certificateId =
+      "55555555-5555-4555-8555-555555555555";
+
+    const response = await mcp({
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/call",
+      params: {
+        name: "get_academy_certificate",
+        arguments: {
+          certificateId,
+        },
+      },
+    }, "Bearer test-token");
+
+    expect(response.status).toBe(200);
+    expect(response.body.error).toBeUndefined();
+
+    expect(
+      getCertificate,
+    ).toHaveBeenCalledExactlyOnceWith(
+      certificateId,
+      claims,
+    );
+
+    const text =
+      response.body.result?.content?.[0]?.text;
+
+    expect(JSON.parse(text ?? "{}")).toMatchObject({
+      data: {
+        id: certificateId,
+        organisationId: claims.organisationId,
+        certificateNumber: "NAB-TEST-001",
+      },
+    });
+  });
+
+  it("rejects invalid get_academy_certificate arguments before use-case execution", async () => {
+    getCertificate.mockClear();
+
+    const response = await mcp({
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {
+        name: "get_academy_certificate",
+        arguments: {
+          certificateId: "not-a-uuid",
+        },
+      },
+    }, "Bearer test-token");
+
+    expect(response.status).toBe(200);
+    expect(getCertificate).not.toHaveBeenCalled();
 
     expect(
       response.body.error ??

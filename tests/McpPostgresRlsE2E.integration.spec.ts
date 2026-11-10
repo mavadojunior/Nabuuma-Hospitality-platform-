@@ -31,6 +31,8 @@ interface TenantFixture {
   readonly learnerId: string;
   readonly courseId: string;
   readonly lessonId: string;
+  readonly enrolmentId: string;
+  readonly certificateId: string;
 }
 
 interface Fixtures {
@@ -76,6 +78,18 @@ interface AcademyLessonResult {
   readonly sequenceNumber: number;
   readonly estimatedDurationMinutes?: number;
   readonly isPublished: boolean;
+}
+
+interface AcademyCertificateResult {
+  readonly id: string;
+  readonly organisationId: string;
+  readonly learnerId: string;
+  readonly courseId: string;
+  readonly enrolmentId: string;
+  readonly certificateNumber: string;
+  readonly issuedAt: string;
+  readonly issuedById?: string;
+  readonly metadata: Record<string, unknown>;
 }
 
 interface TextToolPayload<T> {
@@ -218,6 +232,8 @@ async function seedFixtures(
     learnerId: randomUUID(),
     courseId: randomUUID(),
     lessonId: randomUUID(),
+    enrolmentId: randomUUID(),
+    certificateId: randomUUID(),
   };
 
   const tenantB: TenantFixture = {
@@ -225,6 +241,8 @@ async function seedFixtures(
     learnerId: randomUUID(),
     courseId: randomUUID(),
     lessonId: randomUUID(),
+    enrolmentId: randomUUID(),
+    certificateId: randomUUID(),
   };
 
   const client =
@@ -399,6 +417,70 @@ async function seedFixtures(
         tenantB.organisationId,
         tenantB.courseId,
         `mcp.lesson.b.${tenantB.lessonId}`,
+      ],
+    );
+
+    await client.query(
+      `
+        INSERT INTO nabuuma.academy_enrolments (
+          id,
+          organisation_id,
+          learner_id,
+          course_id,
+          status,
+          completed_at
+        )
+        VALUES
+          ($1, $2, $3, $4, 'COMPLETED', now()),
+          ($5, $6, $7, $8, 'COMPLETED', now())
+      `,
+      [
+        tenantA.enrolmentId,
+        tenantA.organisationId,
+        tenantA.learnerId,
+        tenantA.courseId,
+        tenantB.enrolmentId,
+        tenantB.organisationId,
+        tenantB.learnerId,
+        tenantB.courseId,
+      ],
+    );
+
+    await client.query(
+      `
+        INSERT INTO nabuuma.academy_certificates (
+          id,
+          organisation_id,
+          learner_id,
+          course_id,
+          enrolment_id,
+          certificate_number,
+          issued_by_id,
+          metadata
+        )
+        VALUES
+          (
+            $1, $2, $3, $4, $5, $6, $3,
+            '{"source":"mcp-e2e"}'::jsonb
+          ),
+          (
+            $7, $8, $9, $10, $11, $12, $9,
+            '{"source":"mcp-e2e"}'::jsonb
+          )
+      `,
+      [
+        tenantA.certificateId,
+        tenantA.organisationId,
+        tenantA.learnerId,
+        tenantA.courseId,
+        tenantA.enrolmentId,
+        `NAB-MCP-A-${tenantA.certificateId}`,
+        tenantB.certificateId,
+        tenantB.organisationId,
+        tenantB.learnerId,
+        tenantB.courseId,
+        tenantB.enrolmentId,
+        `NAB-MCP-B-${tenantB.certificateId}`,
       ],
     );
 
@@ -1048,6 +1130,211 @@ const suite = describe.skipIf(!databaseUrl)(
               value.tenantB.organisationId,
           ),
         ).toBe(true);
+      },
+    );
+
+    it(
+      "returns only the authenticated learner's certificates for each tenant",
+      async () => {
+        const value =
+          requireFixtures();
+
+        const [
+          tokenA,
+          tokenB,
+        ] = await Promise.all([
+          token(value.tenantA),
+          token(value.tenantB),
+        ]);
+
+        const [
+          certificatesA,
+          certificatesB,
+        ] = await Promise.all([
+          callTool<
+            readonly AcademyCertificateResult[]
+          >(
+            tokenA,
+            "list_academy_certificates",
+          ),
+          callTool<
+            readonly AcademyCertificateResult[]
+          >(
+            tokenB,
+            "list_academy_certificates",
+          ),
+        ]);
+
+        expect(certificatesA).toHaveLength(1);
+        expect(certificatesB).toHaveLength(1);
+
+        expect(certificatesA[0]).toMatchObject({
+          id:
+            value.tenantA.certificateId,
+          organisationId:
+            value.tenantA.organisationId,
+          learnerId:
+            value.tenantA.learnerId,
+          courseId:
+            value.tenantA.courseId,
+          enrolmentId:
+            value.tenantA.enrolmentId,
+          certificateNumber:
+            `NAB-MCP-A-${value.tenantA.certificateId}`,
+          metadata: {
+            source: "mcp-e2e",
+          },
+        });
+
+        expect(certificatesB[0]).toMatchObject({
+          id:
+            value.tenantB.certificateId,
+          organisationId:
+            value.tenantB.organisationId,
+          learnerId:
+            value.tenantB.learnerId,
+          courseId:
+            value.tenantB.courseId,
+          enrolmentId:
+            value.tenantB.enrolmentId,
+          certificateNumber:
+            `NAB-MCP-B-${value.tenantB.certificateId}`,
+          metadata: {
+            source: "mcp-e2e",
+          },
+        });
+
+        expect(
+          certificatesA.some(
+            ({ id }) =>
+              id === value.tenantB.certificateId,
+          ),
+        ).toBe(false);
+
+        expect(
+          certificatesB.some(
+            ({ id }) =>
+              id === value.tenantA.certificateId,
+          ),
+        ).toBe(false);
+      },
+    );
+
+    it(
+      "returns a same-tenant certificate by identifier",
+      async () => {
+        const value =
+          requireFixtures();
+
+        const certificate =
+          await callTool<
+            AcademyCertificateResult
+          >(
+            await token(value.tenantA),
+            "get_academy_certificate",
+            {
+              certificateId:
+                value.tenantA.certificateId,
+            },
+          );
+
+        expect(certificate).toMatchObject({
+          id:
+            value.tenantA.certificateId,
+          organisationId:
+            value.tenantA.organisationId,
+          learnerId:
+            value.tenantA.learnerId,
+          courseId:
+            value.tenantA.courseId,
+          enrolmentId:
+            value.tenantA.enrolmentId,
+          certificateNumber:
+            `NAB-MCP-A-${value.tenantA.certificateId}`,
+          metadata: {
+            source: "mcp-e2e",
+          },
+        });
+
+        expect(certificate.issuedAt)
+          .toEqual(expect.any(String));
+      },
+    );
+
+    it(
+      "does not disclose a Tenant A certificate to a Tenant B JWT",
+      async () => {
+        const value =
+          requireFixtures();
+
+        const accessToken =
+          await token(value.tenantB);
+
+        const response =
+          await fetch(
+            `${origin}/mcp`,
+            {
+              method: "POST",
+              headers: {
+                accept:
+                  "application/json, text/event-stream",
+                authorization:
+                  `Bearer ${accessToken}`,
+                "content-type":
+                  "application/json",
+                origin,
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 2,
+                method: "tools/call",
+                params: {
+                  name:
+                    "get_academy_certificate",
+                  arguments: {
+                    certificateId:
+                      value.tenantA.certificateId,
+                  },
+                },
+              }),
+            },
+          );
+
+        const responseText =
+          await response.text();
+
+        expect(response.status).toBe(200);
+
+        const payload =
+          decodeJsonRpcResponse(
+            responseText,
+          );
+
+        expect(payload.error)
+          .toBeUndefined();
+
+        expect(payload.result?.isError)
+          .toBe(true);
+
+        const content =
+          payload.result?.content;
+
+        expect(content).toHaveLength(1);
+        expect(content?.[0]?.type).toBe("text");
+
+        const text =
+          content?.[0]?.text;
+
+        expect(
+          JSON.parse(text ?? "{}"),
+        ).toEqual({
+          error: {
+            code:
+              "MCP_TOOL_EXECUTION_FAILED",
+            message:
+              "The requested Academy operation could not be completed.",
+          },
+        });
       },
     );
 

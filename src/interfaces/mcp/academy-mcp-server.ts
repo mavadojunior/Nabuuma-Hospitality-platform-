@@ -18,6 +18,12 @@ export const LIST_PUBLISHED_COURSES_TOOL =
 export const LIST_COURSE_LESSONS_TOOL =
   "list_course_lessons";
 
+export const LIST_ACADEMY_CERTIFICATES_TOOL =
+  "list_academy_certificates";
+
+export const GET_ACADEMY_CERTIFICATE_TOOL =
+  "get_academy_certificate";
+
 export interface AcademyMcpServerDependencies {
   readonly services: AcademyApplicationServices;
   readonly claims: TokenClaims;
@@ -114,6 +120,59 @@ export function createAcademyMcpServer(
             );
 
         return serialiseToolResult(lessons);
+      } catch {
+        return sanitisedToolFailure();
+      }
+    },
+  );
+
+  server.registerTool(
+    LIST_ACADEMY_CERTIFICATES_TOOL,
+    {
+      description:
+        "List Academy certificates visible to the authenticated caller.",
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const certificates =
+          await dependencies.services
+            .listAcademyCertificatesUseCase
+            .execute(dependencies.claims);
+
+        return serialiseToolResult(
+          certificates,
+        );
+      } catch {
+        return sanitisedToolFailure();
+      }
+    },
+  );
+
+  server.registerTool(
+    GET_ACADEMY_CERTIFICATE_TOOL,
+    {
+      description:
+        "Get an Academy certificate visible to the authenticated caller.",
+      inputSchema: {
+        certificateId: z
+          .string()
+          .uuid(),
+      },
+    },
+    async ({ certificateId }) => {
+      try {
+        const certificate =
+          await dependencies.services
+            .getAcademyCertificateUseCase
+            .execute(
+              certificateId,
+              dependencies.claims,
+            );
+
+        return serialiseToolResult(
+          certificate,
+        );
       } catch {
         return sanitisedToolFailure();
       }
