@@ -101,6 +101,36 @@ describe("ServerLifecycle", () => {
     );
   });
 
+  it("does not mark stopped when the deadline expires before draining", async () => {
+    const runtime = new RuntimeStateMachine();
+    let resolveHttpClose!: () => void;
+    const httpClose = new Promise<void>((resolve) => {
+      resolveHttpClose = resolve;
+    });
+    const closeDatabase = vi.fn(async () => undefined);
+
+    const lifecycle = new ServerLifecycle({
+      app: createApp(() => httpClose),
+      runtime,
+      closeDatabase,
+      shutdownTimeoutMs: 10,
+    });
+
+    lifecycle.markReady();
+
+    await expect(lifecycle.shutdown()).rejects.toThrow(
+      "Graceful shutdown timeout exceeded.",
+    );
+    expect(runtime.currentState()).toBe("SHUTTING_DOWN");
+    expect(closeDatabase).not.toHaveBeenCalled();
+
+    resolveHttpClose();
+    await vi.waitFor(() => {
+      expect(closeDatabase).toHaveBeenCalledOnce();
+      expect(runtime.currentState()).toBe("STOPPED");
+    });
+  });
+
   it("preserves both shutdown failures", async () => {
     const runtime = new RuntimeStateMachine();
 
