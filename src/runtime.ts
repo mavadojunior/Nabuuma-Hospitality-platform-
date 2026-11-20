@@ -52,6 +52,17 @@ export async function createRuntime(
   const jwtConfig =
     loadJwtAuthenticationConfig(environment);
 
+  const hasCustomInitializer =
+    factories.initializePool !== undefined;
+  const hasCustomCloser =
+    factories.closePool !== undefined;
+
+  if (hasCustomInitializer !== hasCustomCloser) {
+    throw new Error(
+      "RuntimeFactories must provide initializePool and closePool together.",
+    );
+  }
+
   const initializePool =
     factories.initializePool ?? initializeDatabasePool;
   const closePool =
