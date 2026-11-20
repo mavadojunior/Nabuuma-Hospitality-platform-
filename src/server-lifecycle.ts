@@ -57,18 +57,19 @@ export class ServerLifecycle {
           ),
           this.dependencies.shutdownTimeoutMs,
         );
-
         timeout.unref();
       },
     );
 
-    try {
-      await Promise.race([
-        this.drainResources(),
-        deadline,
-      ]);
-
+    // Resource draining is not cancellable by Promise.race.
+    // Continue observing it and mark STOPPED only when all
+    // cleanup work actually completes successfully.
+    const drain = this.drainResources().then(() => {
       this.dependencies.runtime.markStopped();
+    });
+
+    try {
+      await Promise.race([drain, deadline]);
     } finally {
       if (timeout) {
         clearTimeout(timeout);
