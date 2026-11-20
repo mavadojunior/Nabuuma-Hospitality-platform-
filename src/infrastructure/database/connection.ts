@@ -1,75 +1,111 @@
 import { Pool, type PoolConfig } from "pg";
 
 /**
- * Production-grade PostgreSQL connection pool.
- * Configured via environment variables with strict validation and lifecycle management.
- *
- * Environment variables:
- * - DATABASE_URL: Full PostgreSQL connection string (required)
- * - DB_MAX_CONNECTIONS: Maximum pool size (default: 20)
- * - DB_IDLE_TIMEOUT_MS: Idle connection timeout in milliseconds (default: 30000)
- * - DB_CONNECTION_TIMEOUT_MS: Connection establishment timeout (default: 5000)
- * - NODE_ENV: Environment name (used for logging)
+ * Production PostgreSQL pool with explicit ownership and shutdown state.
  */
-
 let activePool: Pool | null = null;
+let poolClosePromise: Promise<void> | null = null;
+
+function parseStrictInteger(
+  value: string | undefined,
+  fallback: string,
+  name: string,
+  minimum: number,
+  maximum: number,
+): number {
+  const candidate = value ?? fallback;
+
+  if (!/^[0-9]+$/.test(candidate)) {
+    throw new Error(`${name} must be an integer.`);
+  }
+
+  const parsed = Number(candidate);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < minimum ||
+    parsed > maximum
+  ) {
+    throw new Error(
+      `${name} must be between ${minimum} and ${maximum}.`,
+    );
+  }
+
+  return parsed;
+}
 
 /**
- * Parse and validate database connection configuration from environment.
- * Enforces strict types and provides sensible production defaults.
+ * Parse and validate configuration without creating a Pool.
+ * Exported to make configuration validation independently testable.
  */
-function parseDatabaseConfig(): PoolConfig {
-  const databaseUrl = process.env.DATABASE_URL;
+export function parseDatabaseConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): PoolConfig {
+  const databaseUrl = environment.DATABASE_URL?.trim();
+
   if (!databaseUrl) {
     throw new Error(
-      "DATABASE_URL environment variable is required. " +
-      "Expected format: postgresql://user:password@host:port/database",
+      "DATABASE_URL environment variable is required.",
     );
   }
 
-  const maxConnections = parseInt(process.env.DB_MAX_CONNECTIONS ?? "20", 10);
-  if (!Number.isFinite(maxConnections) || maxConnections < 1 || maxConnections > 100) {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(databaseUrl);
+  } catch {
+    throw new Error("DATABASE_URL must be a valid URL.");
+  }
+
+  if (
+    parsedUrl.protocol !== "postgres:" &&
+    parsedUrl.protocol !== "postgresql:"
+  ) {
     throw new Error(
-      `DB_MAX_CONNECTIONS must be an integer between 1 and 100, got: ${process.env.DB_MAX_CONNECTIONS}`,
+      "DATABASE_URL must use the postgres or postgresql protocol.",
     );
   }
 
-  const idleTimeoutMs = parseInt(process.env.DB_IDLE_TIMEOUT_MS ?? "30000", 10);
-  if (!Number.isFinite(idleTimeoutMs) || idleTimeoutMs < 1000 || idleTimeoutMs > 600000) {
-    throw new Error(
-      `DB_IDLE_TIMEOUT_MS must be an integer between 1000 and 600000 (ms), got: ${process.env.DB_IDLE_TIMEOUT_MS}`,
-    );
-  }
-
-  const connectionTimeoutMs = parseInt(process.env.DB_CONNECTION_TIMEOUT_MS ?? "5000", 10);
-  if (!Number.isFinite(connectionTimeoutMs) || connectionTimeoutMs < 1000 || connectionTimeoutMs > 60000) {
-    throw new Error(
-      `DB_CONNECTION_TIMEOUT_MS must be an integer between 1000 and 60000 (ms), got: ${process.env.DB_CONNECTION_TIMEOUT_MS}`,
-    );
-  }
+  const maxConnections = parseStrictInteger(
+    environment.DB_MAX_CONNECTIONS,
+    "20",
+    "DB_MAX_CONNECTIONS",
+    1,
+    100,
+  );
+  const idleTimeoutMs = parseStrictInteger(
+    environment.DB_IDLE_TIMEOUT_MS,
+    "30000",
+    "DB_IDLE_TIMEOUT_MS",
+    1000,
+    600000,
+  );
+  const connectionTimeoutMs = parseStrictInteger(
+    environment.DB_CONNECTION_TIMEOUT_MS,
+    "5000",
+    "DB_CONNECTION_TIMEOUT_MS",
+    1000,
+    60000,
+  );
 
   return {
     connectionString: databaseUrl,
     max: maxConnections,
     idleTimeoutMillis: idleTimeoutMs,
     connectionTimeoutMillis: connectionTimeoutMs,
-    
-    /**
-     * Declarative error handling: fail fast on validation rule violations.
-     * Production behavior: do not retry on certain error classes.
-     */
     allowExitOnIdle: false,
   };
 }
 
 /**
- * Initialize the global database pool as a singleton.
- * Must be called exactly once at application startup, before any database operations.
- *
- * @returns The active PostgreSQL pool
- * @throws If DATABASE_URL is missing, malformed, or connection fails
+ * Initialize the singleton pool. Initialization is synchronous; connectivity
+ * must be established by the startup readiness probe.
  */
 export function initializeDatabasePool(): Pool {
+  if (poolClosePromise) {
+    throw new Error(
+      "[DB] Database pool is shutting down. Initialization is unavailable.",
+    );
+  }
+
   if (activePool) {
     console.warn(
       "[DB] Database pool already initialized. Returning active instance.",
@@ -78,32 +114,28 @@ export function initializeDatabasePool(): Pool {
   }
 
   const config = parseDatabaseConfig();
+  const pool = new Pool(config);
+  activePool = pool;
 
-  activePool = new Pool(config);
-
-  /**
-   * Log pool lifecycle events in development/debug mode.
-   */
   const isDebug = process.env.NODE_ENV !== "production";
 
-  activePool.on("connect", () => {
+  pool.on("connect", () => {
     if (isDebug) {
       console.log("[DB] Client connected to pool");
     }
   });
 
-  activePool.on("remove", () => {
+  pool.on("remove", () => {
     if (isDebug) {
       console.log("[DB] Client removed from pool");
     }
   });
 
-  activePool.on("error", (err: Error, client: any) => {
+  pool.on("error", (err: Error) => {
+    const code = "code" in err ? err.code : undefined;
     console.error("[DB] Unexpected pool error", {
       message: err.message,
-      code: (err as any).code,
-      detail: (err as any).detail,
-      clientState: client?.queryQueue?.length ?? 0,
+      code,
     });
   });
 
@@ -113,83 +145,92 @@ export function initializeDatabasePool(): Pool {
     connectionTimeoutMs: config.connectionTimeoutMillis,
   });
 
-  return activePool;
+  return pool;
 }
 
-/**
- * Retrieve the active database pool.
- * Throws if the pool has not been initialized.
- *
- * @returns The active PostgreSQL pool
- * @throws If pool is not initialized
- */
 export function getDatabasePool(): Pool {
-  if (!activePool) {
+  if (!activePool || poolClosePromise) {
     throw new Error(
-      "[DB] Database pool is not initialized. " +
-      "Call initializeDatabasePool() at application startup.",
+      "[DB] Database pool is unavailable. " +
+      "Initialize it before database operations.",
     );
   }
+
   return activePool;
 }
 
 /**
- * Gracefully close the database pool and drain all active connections.
- * Must be called during application shutdown to prevent connection leaks.
- *
- * Behavior:
- * - Prevents new connection checkouts
- * - Waits for active queries to complete (up to 30 seconds)
- * - Terminates remaining idle connections
- * - Logs lifecycle transitions
- *
- * @throws If closure fails or times out
+ * Close the singleton pool once. Concurrent callers share the same operation.
+ * The timeout bounds the caller's wait; it does not pretend to cancel pg's
+ * underlying Pool.end(). The pool remains unavailable until end() settles.
  */
 export async function closeDatabasePool(): Promise<void> {
-  if (!activePool) {
+  if (poolClosePromise) {
+    return poolClosePromise;
+  }
+
+  const pool = activePool;
+  if (!pool) {
     console.warn("[DB] Database pool is not initialized. Skipping closure.");
     return;
   }
 
-  try {
-    console.log("[DB] Beginning graceful pool shutdown...");
+  console.log("[DB] Beginning graceful pool shutdown...");
 
-    /**
-     * Set a hard timeout: if the pool doesn't close within 30 seconds,
-     * force termination and log a warning.
-     */
-    const shutdownTimeoutMs = 30000;
-    const shutdownPromise = activePool.end();
-    const timeoutPromise = new Promise<void>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("[DB] Pool shutdown timeout exceeded 30 seconds")),
-        shutdownTimeoutMs,
+  let timeout: NodeJS.Timeout | undefined;
+  const endOperation = pool.end().then(() => {
+    if (activePool === pool) {
+      activePool = null;
+    }
+  });
+
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(
+      () => reject(
+        new Error("[DB] Pool shutdown timeout exceeded 30 seconds"),
       ),
+      30000,
     );
+    timeout.unref();
+  });
 
-    await Promise.race([shutdownPromise, timeoutPromise]);
+  const closeAttempt = Promise.race([
+    endOperation,
+    deadline,
+  ]).finally(() => {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  });
 
-    console.log("[DB] Database pool closed successfully");
-    activePool = null;
-  } catch (error) {
-    console.error("[DB] Error during pool closure", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    activePool = null;
-    throw error;
-  }
+  poolClosePromise = closeAttempt;
+
+  // Allow a later retry only after the actual Pool.end() operation settles.
+  void endOperation.then(
+    () => {
+      if (poolClosePromise === closeAttempt) {
+        poolClosePromise = null;
+      }
+      console.log("[DB] Database pool closed successfully");
+    },
+    (error: unknown) => {
+      if (poolClosePromise === closeAttempt) {
+        poolClosePromise = null;
+      }
+      console.error("[DB] Error during pool closure", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    },
+  );
+
+  return closeAttempt;
 }
 
-/**
- * Health check: verify that the pool can acquire a connection and execute a trivial query.
- * Used for startup verification and diagnostics.
- *
- * @returns True if the pool is healthy, false otherwise
- */
 export async function verifyDatabaseHealth(): Promise<boolean> {
   try {
     const pool = getDatabasePool();
     const client = await pool.connect();
+
     try {
       const result = await client.query("SELECT 1 as health_check");
       return result.rowCount === 1;
