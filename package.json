@@ -7,7 +7,7 @@
     "test:security": "vitest run",
     "test": "npm run test:security",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/server.js",
+    "start": "node --env-file=.env.production dist/server.js",
     "verify:esm-imports": "node scripts/verify-esm-imports.mjs"
   },
   "devDependencies": {

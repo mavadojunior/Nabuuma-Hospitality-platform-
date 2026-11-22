@@ -176,4 +176,44 @@ describe("PgCertificateVerifier", () => {
     expect(query).toHaveBeenCalledWith("ROLLBACK");
     expect(release).toHaveBeenCalledOnce();
   });
+
+  it("discards the client when rollback fails and preserves the original failure", async () => {
+    const operationFailure = new Error("verification failure");
+    const rollbackFailure = new Error("rollback failure");
+
+    const query = vi.fn(async (sql: string) => {
+      if (sql === "BEGIN") {
+        return { rows: [] };
+      }
+
+      if (sql === "SET LOCAL ROLE nabuuma_certificate_verifier") {
+        return { rows: [] };
+      }
+
+      if (sql === "ROLLBACK") {
+        throw rollbackFailure;
+      }
+
+      throw operationFailure;
+    });
+
+    const release = vi.fn();
+    const pool = {
+      connect: vi.fn(async () => ({ query, release })),
+    } as unknown as Pool;
+
+    const verifier = new PgCertificateVerifier(pool);
+
+    await expect(
+      verifier.verify("NAB-TEST"),
+    ).rejects.toBe(operationFailure);
+
+    expect(query).toHaveBeenCalledWith("ROLLBACK");
+    expect(release).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Database rollback failed; connection discarded",
+      }),
+    );
+  });
+
 });

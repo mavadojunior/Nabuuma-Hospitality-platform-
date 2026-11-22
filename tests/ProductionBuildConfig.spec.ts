@@ -134,7 +134,7 @@ describe("production build configuration", () => {
     );
 
     expect(packageJson.scripts?.start).toBe(
-      "node dist/server.js",
+      "node --env-file=.env.production dist/server.js",
     );
   });
 });

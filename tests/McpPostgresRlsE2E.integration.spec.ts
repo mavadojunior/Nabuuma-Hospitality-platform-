@@ -33,6 +33,7 @@ interface TenantFixture {
   readonly lessonId: string;
   readonly enrolmentId: string;
   readonly certificateId: string;
+  readonly enrolmentCourseId: string;
 }
 
 interface Fixtures {
@@ -234,6 +235,7 @@ async function seedFixtures(
     lessonId: randomUUID(),
     enrolmentId: randomUUID(),
     certificateId: randomUUID(),
+    enrolmentCourseId: randomUUID(),
   };
 
   const tenantB: TenantFixture = {
@@ -243,6 +245,7 @@ async function seedFixtures(
     lessonId: randomUUID(),
     enrolmentId: randomUUID(),
     certificateId: randomUUID(),
+    enrolmentCourseId: randomUUID(),
   };
 
   const client =
@@ -370,6 +373,52 @@ async function seedFixtures(
         tenantB.courseId,
         tenantB.organisationId,
         `mcp.course.b.${tenantB.courseId}`,
+        tenantB.learnerId,
+      ],
+    );
+
+    await client.query(
+      `
+        INSERT INTO nabuuma.academy_courses (
+          id,
+          organisation_id,
+          stable_key,
+          version,
+          title,
+          description,
+          is_published,
+          created_by_id
+        )
+        VALUES
+          (
+            $1,
+            $2,
+            $3,
+            1,
+            'MCP E2E Enrolment Course A',
+            'Tenant A MCP enrolment fixture',
+            true,
+            $4
+          ),
+          (
+            $5,
+            $6,
+            $7,
+            1,
+            'MCP E2E Enrolment Course B',
+            'Tenant B MCP enrolment fixture',
+            true,
+            $8
+          )
+      `,
+      [
+        tenantA.enrolmentCourseId,
+        tenantA.organisationId,
+        `mcp.enrolment.a.${tenantA.enrolmentCourseId}`,
+        tenantA.learnerId,
+        tenantB.enrolmentCourseId,
+        tenantB.organisationId,
+        `mcp.enrolment.b.${tenantB.enrolmentCourseId}`,
         tenantB.learnerId,
       ],
     );
@@ -564,22 +613,9 @@ async function cleanupFixtures(
       [fixtures.organisationIds],
     );
 
-    await client.query(
-      `
-        DELETE FROM nabuuma.organisations
-        WHERE id = ANY($1::uuid[])
-      `,
-      [fixtures.organisationIds],
-    );
-
-    await client.query(
-      `
-        DELETE FROM nabuuma.users
-        WHERE id = ANY($1::uuid[])
-      `,
-      [fixtures.userIds],
-    );
-
+    // Audit events are immutable and retain RESTRICT foreign keys to their
+    // organisation and actor. Preserve those identities while removing all
+    // mutable Academy fixture state.
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1335,6 +1371,171 @@ const suite = describe.skipIf(!databaseUrl)(
               "The requested Academy operation could not be completed.",
           },
         });
+      },
+    );
+
+    it(
+      "enrols the authenticated learner in a same-tenant course",
+      async () => {
+        const value =
+          requireFixtures();
+
+        const enrolment =
+          await callTool<{
+            readonly id: string;
+            readonly organisationId: string;
+            readonly learnerId: string;
+            readonly courseId: string;
+            readonly status: string;
+            readonly enrolledAt: string;
+          }>(
+            await token(value.tenantA),
+            "enrol_in_academy_course",
+            {
+              courseId:
+                value.tenantA.enrolmentCourseId,
+            },
+          );
+
+        expect(enrolment).toMatchObject({
+          organisationId:
+            value.tenantA.organisationId,
+          learnerId:
+            value.tenantA.learnerId,
+          courseId:
+            value.tenantA.enrolmentCourseId,
+          status: "ACTIVE",
+        });
+
+        expect(enrolment.id)
+          .toEqual(expect.any(String));
+
+        expect(enrolment.enrolledAt)
+          .toEqual(expect.any(String));
+      },
+    );
+
+    it(
+      "returns the same enrolment for repeated MCP enrolment",
+      async () => {
+        const value =
+          requireFixtures();
+
+        const accessToken =
+          await token(value.tenantA);
+
+        const first =
+          await callTool<{
+            readonly id: string;
+            readonly courseId: string;
+          }>(
+            accessToken,
+            "enrol_in_academy_course",
+            {
+              courseId:
+                value.tenantA.enrolmentCourseId,
+            },
+          );
+
+        const second =
+          await callTool<{
+            readonly id: string;
+            readonly courseId: string;
+          }>(
+            accessToken,
+            "enrol_in_academy_course",
+            {
+              courseId:
+                value.tenantA.enrolmentCourseId,
+            },
+          );
+
+        expect(second.id).toBe(first.id);
+
+        expect(second.courseId).toBe(
+          value.tenantA.enrolmentCourseId,
+        );
+      },
+    );
+
+    it(
+      "does not enrol Tenant B into a Tenant A course",
+      async () => {
+        const value =
+          requireFixtures();
+
+        const accessToken =
+          await token(value.tenantB);
+
+        const response =
+          await fetch(
+            `${origin}/mcp`,
+            {
+              method: "POST",
+              headers: {
+                accept:
+                  "application/json, text/event-stream",
+                authorization:
+                  `Bearer ${accessToken}`,
+                "content-type":
+                  "application/json",
+                origin,
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 3,
+                method: "tools/call",
+                params: {
+                  name:
+                    "enrol_in_academy_course",
+                  arguments: {
+                    courseId:
+                      value.tenantA.enrolmentCourseId,
+                  },
+                },
+              }),
+            },
+          );
+
+        const responseText =
+          await response.text();
+
+        expect(response.status).toBe(200);
+
+        const payload =
+          decodeJsonRpcResponse(
+            responseText,
+          );
+
+        expect(payload.error)
+          .toBeUndefined();
+
+        expect(payload.result?.isError)
+          .toBe(true);
+
+        const content =
+          payload.result?.content;
+
+        expect(content).toHaveLength(1);
+        expect(content?.[0]?.type).toBe("text");
+
+        const text =
+          content?.[0]?.text;
+
+        expect(
+          JSON.parse(text ?? "{}"),
+        ).toEqual({
+          error: {
+            code:
+              "MCP_TOOL_EXECUTION_FAILED",
+            message:
+              "The requested Academy operation could not be completed.",
+          },
+        });
+
+        expect(text).not.toContain(
+          value.tenantA.enrolmentCourseId,
+        );
       },
     );
 

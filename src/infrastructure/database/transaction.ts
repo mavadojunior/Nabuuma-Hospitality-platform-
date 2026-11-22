@@ -23,6 +23,7 @@ export class PgTransactionManager {
   ): Promise<T> {
     const client = await this.pool.connect();
     let transactionStarted = false;
+    let releaseError: Error | undefined;
 
     const runtimeSecurity: SecurityContext =
       "claims" in security ? security : createSecurityContext(security, "request");
@@ -59,13 +60,20 @@ export class PgTransactionManager {
         try {
           await client.query("ROLLBACK");
         } catch {
-          // Preserve the original failure. The connection is still released.
+          // Preserve the original failure and discard the uncertain connection.
+          releaseError = new Error(
+            "Database rollback failed; connection discarded",
+          );
         }
       }
 
       throw error;
     } finally {
-      client.release();
+      if (releaseError) {
+        client.release(releaseError);
+      } else {
+        client.release();
+      }
     }
   }
 }

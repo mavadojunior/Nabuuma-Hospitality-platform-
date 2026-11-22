@@ -24,6 +24,9 @@ export const LIST_ACADEMY_CERTIFICATES_TOOL =
 export const GET_ACADEMY_CERTIFICATE_TOOL =
   "get_academy_certificate";
 
+export const ENROL_IN_ACADEMY_COURSE_TOOL =
+  "enrol_in_academy_course";
+
 export interface AcademyMcpServerDependencies {
   readonly services: AcademyApplicationServices;
   readonly claims: TokenClaims;
@@ -172,6 +175,36 @@ export function createAcademyMcpServer(
 
         return serialiseToolResult(
           certificate,
+        );
+      } catch {
+        return sanitisedToolFailure();
+      }
+    },
+  );
+
+  server.registerTool(
+    ENROL_IN_ACADEMY_COURSE_TOOL,
+    {
+      description:
+        "Enrol the authenticated learner in a visible Academy course.",
+      inputSchema: {
+        courseId: z
+          .string()
+          .uuid(),
+      },
+    },
+    async ({ courseId }) => {
+      try {
+        const enrolment =
+          await dependencies.services
+            .enrolInAcademyCourseUseCase
+            .execute(
+              courseId,
+              dependencies.claims,
+            );
+
+        return serialiseToolResult(
+          enrolment,
         );
       } catch {
         return sanitisedToolFailure();

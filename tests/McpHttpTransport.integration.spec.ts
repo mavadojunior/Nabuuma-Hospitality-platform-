@@ -114,6 +114,17 @@ const getCertificate = vi.fn(
   }),
 );
 
+const enrol = vi.fn(
+  async (courseId: string) => ({
+    id: "66666666-6666-4666-8666-666666666666",
+    organisationId: claims.organisationId,
+    learnerId: claims.subject,
+    courseId,
+    status: "ACTIVE",
+    enrolledAt: "2026-01-03T00:00:00.000Z",
+  }),
+);
+
 const services = {
   listPublishedAcademyCoursesUseCase: {
     execute: listCourses,
@@ -126,6 +137,9 @@ const services = {
   },
   getAcademyCertificateUseCase: {
     execute: getCertificate,
+  },
+  enrolInAcademyCourseUseCase: {
+    execute: enrol,
   },
 } as unknown as AcademyApplicationServices;
 
@@ -382,7 +396,7 @@ describe("authenticated MCP HTTP transport", () => {
     expect(response.status).toBe(401);
   });
 
-  it("discovers the four read-only Academy tools", async () => {
+  it("discovers the five Academy tools", async () => {
     const response = await mcp({
       jsonrpc: "2.0",
       id: 1,
@@ -401,6 +415,7 @@ describe("authenticated MCP HTTP transport", () => {
       "list_course_lessons",
       "list_academy_certificates",
       "get_academy_certificate",
+      "enrol_in_academy_course",
     ]);
   });
 
@@ -579,6 +594,126 @@ describe("authenticated MCP HTTP transport", () => {
       response.body.error ??
         response.body.result?.isError,
     ).toBeTruthy();
+  });
+
+  it("enrols in an Academy course using trusted claims", async () => {
+    enrol.mockClear();
+
+    const courseId =
+      "33333333-3333-4333-8333-333333333333";
+
+    const response = await mcp({
+      jsonrpc: "2.0",
+      id: 8,
+      method: "tools/call",
+      params: {
+        name: "enrol_in_academy_course",
+        arguments: {
+          courseId,
+        },
+      },
+    }, "Bearer test-token");
+
+    expect(response.status).toBe(200);
+    expect(response.body.error).toBeUndefined();
+
+    expect(enrol).toHaveBeenCalledExactlyOnceWith(
+      courseId,
+      claims,
+    );
+
+    const text =
+      response.body.result?.content?.[0]?.text;
+
+    expect(JSON.parse(text ?? "{}")).toMatchObject({
+      data: {
+        organisationId: claims.organisationId,
+        learnerId: claims.subject,
+        courseId,
+        status: "ACTIVE",
+      },
+    });
+  });
+
+  it("rejects invalid enrolment arguments before use-case execution", async () => {
+    enrol.mockClear();
+
+    const response = await mcp({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: {
+        name: "enrol_in_academy_course",
+        arguments: {
+          courseId: "not-a-uuid",
+        },
+      },
+    }, "Bearer test-token");
+
+    expect(response.status).toBe(200);
+    expect(enrol).not.toHaveBeenCalled();
+
+    expect(
+      response.body.error ??
+        response.body.result?.isError,
+    ).toBeTruthy();
+  });
+
+  it("sanitises Academy enrolment use-case failures", async () => {
+    enrol.mockClear();
+
+    const courseId =
+      "77777777-7777-4777-8777-777777777777";
+
+    enrol.mockRejectedValueOnce(
+      new Error(
+        "sensitive persistence failure",
+      ),
+    );
+
+    const response = await mcp({
+      jsonrpc: "2.0",
+      id: 10,
+      method: "tools/call",
+      params: {
+        name: "enrol_in_academy_course",
+        arguments: {
+          courseId,
+        },
+      },
+    }, "Bearer test-token");
+
+    expect(response.status).toBe(200);
+
+    expect(enrol).toHaveBeenCalledExactlyOnceWith(
+      courseId,
+      claims,
+    );
+
+    expect(response.body.error)
+      .toBeUndefined();
+
+    expect(response.body.result?.isError)
+      .toBe(true);
+
+    const text =
+      response.body.result?.content?.[0]?.text;
+
+    const parsed =
+      JSON.parse(text ?? "{}");
+
+    expect(parsed).toEqual({
+      error: {
+        code:
+          "MCP_TOOL_EXECUTION_FAILED",
+        message:
+          "The requested Academy operation could not be completed.",
+      },
+    });
+
+    expect(text).not.toContain(
+      "sensitive persistence failure",
+    );
   });
 
   it("rejects an unknown tool", async () => {
