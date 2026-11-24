@@ -348,7 +348,28 @@ jobs:
             .
           test -s /tmp/nabuuma-multiarch.oci.tar
           tar -xOf /tmp/nabuuma-multiarch.oci.tar index.json > /tmp/nabuuma-oci-index.json
-          jq -e '[.manifests[].platform | select(.os == "linux" and (.architecture == "amd64" or .architecture == "arm64"))] | map(.architecture) | unique | sort == ["amd64", "arm64"]' /tmp/nabuuma-oci-index.json >/dev/null
+          manifest_digest="$(
+            jq -er '
+              .manifests
+              | map(select(.mediaType == "application/vnd.oci.image.index.v1+json"))
+              | if length == 1 then .[0].digest else error("expected exactly one OCI image index descriptor") end
+            ' /tmp/nabuuma-oci-index.json
+          )"
+          manifest_blob="blobs/sha256/${manifest_digest#sha256:}"
+          tar -xOf /tmp/nabuuma-multiarch.oci.tar "$manifest_blob" > /tmp/nabuuma-platform-index.json
+          jq -e '
+            [
+              .manifests[].platform
+              | select(
+                  .os == "linux" and
+                  (.architecture == "amd64" or .architecture == "arm64")
+                )
+              | .architecture
+            ]
+            | unique
+            | sort
+            | . == ["amd64", "arm64"]
+          ' /tmp/nabuuma-platform-index.json >/dev/null
           echo "AMD64_BUILD=VERIFIED"
           echo "ARM64_BUILD=VERIFIED"
           echo "OCI_INDEX=VERIFIED"
