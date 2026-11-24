@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type {
   RuntimeStateMachine,
-} from "./runtime-health-state";
+} from "./runtime-health-state.js";
 
 export interface ServerLifecycleDependencies {
   readonly app: FastifyInstance;

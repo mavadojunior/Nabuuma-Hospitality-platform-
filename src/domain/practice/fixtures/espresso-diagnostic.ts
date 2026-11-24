@@ -1,4 +1,4 @@
-import type { LabScenario } from "../engine/types";
+import type { LabScenario } from "../engine/types.js";
 
 export const espressoDiagnosticScenario: LabScenario = {
   id: "coffee.espresso-diagnostic.v1",

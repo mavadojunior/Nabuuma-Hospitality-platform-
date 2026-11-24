@@ -19,7 +19,7 @@ describe("supply-chain workflow", () => {
     const content = await workflow();
 
     expect(content).toContain(
-      "actions/dependency-review-action@v4",
+      "actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0",
     );
     expect(content).toContain(
       "fail-on-severity: high",
@@ -30,7 +30,7 @@ describe("supply-chain workflow", () => {
     const content = await workflow();
 
     expect(content).toContain(
-      "aquasecurity/trivy-action@v0.36.0",
+      "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0",
     );
     expect(content).toContain(
       "scan-type: fs",

@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import type { AcademyApplicationServices } from "../../bootstrap";
-import type { AcademyLessonProgressStatus } from "../../domain/academy";
-import type { RequestAuthenticator } from "./authentication";
-import { mapHttpError } from "./errors";
+import type { AcademyApplicationServices } from "../../bootstrap.js";
+import type { AcademyLessonProgressStatus } from "../../domain/academy/index.js";
+import type { RequestAuthenticator } from "./authentication.js";
+import { mapHttpError } from "./errors.js";
 
 interface CourseParams {
   courseId: string;

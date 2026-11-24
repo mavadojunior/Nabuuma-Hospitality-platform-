@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type {
   CertificateVerification,
-} from "../../infrastructure/database/PgCertificateVerifier";
+} from "../../infrastructure/database/PgCertificateVerifier.js";
 
 export interface CertificateVerifier {
   verify(

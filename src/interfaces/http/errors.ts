@@ -2,12 +2,12 @@ import {
   AcademyCertificateNotFoundError,
   AcademyCourseUnavailableError,
   InvalidAcademyLessonProgressError,
-} from "../../application/academy";
-import { AuthenticationError } from "../../infrastructure/authentication/errors";
+} from "../../application/academy/index.js";
+import { AuthenticationError } from "../../infrastructure/authentication/errors.js";
 import {
   DomainConstraintError,
   TenantBoundaryViolationError,
-} from "../../domain/competency/errors";
+} from "../../domain/competency/errors.js";
 
 export interface HttpError {
   readonly statusCode: number;

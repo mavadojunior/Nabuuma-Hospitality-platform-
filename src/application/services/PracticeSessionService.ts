@@ -6,11 +6,11 @@ import {
   TelemetryObservation,
   TelemetryRepository,
   UUID,
-} from "../../domain/competency/repositories/contracts";
+} from "../../domain/competency/repositories/contracts.js";
 import {
   AuthorizationError,
   TelemetryValidationError,
-} from "./errors";
+} from "./errors.js";
 
 export interface PracticeAuthorizationPort {
   canWritePractice(

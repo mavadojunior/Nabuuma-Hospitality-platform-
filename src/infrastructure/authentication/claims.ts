@@ -2,8 +2,8 @@ import type { JWTPayload } from "jose";
 import type {
   SecurityRole,
   TokenClaims,
-} from "../security/security";
-import { AuthenticationError } from "./errors";
+} from "../security/security.js";
+import { AuthenticationError } from "./errors.js";
 
 const ACCEPTED_ROLES = new Set<SecurityRole>([
   "LEARNER",

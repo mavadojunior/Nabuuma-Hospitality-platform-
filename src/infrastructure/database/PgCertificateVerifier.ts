@@ -36,14 +36,11 @@ export class PgCertificateVerifier {
   ): Promise<CertificateVerification | null> {
     const client = await this.pool.connect();
     let transactionStarted = false;
+    let releaseError: Error | undefined;
 
     try {
       await client.query("BEGIN");
       transactionStarted = true;
-
-      await client.query(
-        "SET LOCAL ROLE nabuuma_certificate_verifier",
-      );
 
       const result =
         await client.query<CertificateVerificationRow>(
@@ -85,13 +82,20 @@ export class PgCertificateVerifier {
         try {
           await client.query("ROLLBACK");
         } catch {
-          // Preserve the original database failure.
+          // Preserve the original failure and discard the uncertain connection.
+          releaseError = new Error(
+            "Database rollback failed; connection discarded",
+          );
         }
       }
 
       throw error;
     } finally {
-      client.release();
+      if (releaseError) {
+        client.release(releaseError);
+      } else {
+        client.release();
+      }
     }
   }
 }

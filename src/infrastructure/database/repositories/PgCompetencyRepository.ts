@@ -4,10 +4,10 @@ import type {
   CompetencyRepository,
   LearnerCompetency,
   UUID,
-} from "../../../domain/competency/repositories/contracts";
-import { DomainStateTransitionError, TenantBoundaryViolationError } from "../../../domain/competency/errors";
-import type { PgExecutionContext } from "../transaction";
-import { mapPgError } from "../error-mapping";
+} from "../../../domain/competency/repositories/contracts.js";
+import { DomainStateTransitionError, TenantBoundaryViolationError } from "../../../domain/competency/errors.js";
+import type { PgExecutionContext } from "../transaction.js";
+import { mapPgError } from "../error-mapping.js";
 
 interface CompetencyDefinitionRow {
   id: string;

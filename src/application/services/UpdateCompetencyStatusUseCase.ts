@@ -2,9 +2,9 @@ import type {
   CompetencyRepository,
   LearnerCompetency,
   UUID,
-} from "../../domain/competency/repositories/contracts";
-import type { PgExecutionContext, PgTransactionManager } from "../../infrastructure/database/transaction";
-import type { PgAuditRepository } from "../../infrastructure/database/repositories/PgAuditRepository";
+} from "../../domain/competency/repositories/contracts.js";
+import type { PgExecutionContext, PgTransactionManager } from "../../infrastructure/database/transaction.js";
+import type { PgAuditRepository } from "../../infrastructure/database/repositories/PgAuditRepository.js";
 
 export interface UpdateCompetencyStatusInput {
   learnerCompetencyId: UUID;

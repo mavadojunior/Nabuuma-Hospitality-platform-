@@ -1,2 +1,16 @@
 node_modules/
 dist/
+.env.production
+
+# Private runtime configuration and credentials
+.env
+.env.*
+!.env.example
+runtime.env
+*.env.local
+*.env.test
+
+# Local command-output and database recovery artifacts
+recovery/
+
+.artifacts/

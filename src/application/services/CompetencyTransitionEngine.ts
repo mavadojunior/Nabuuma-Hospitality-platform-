@@ -1,5 +1,5 @@
-import { AssessmentRepository, CompetencyRepository, EvidenceRepository, LearnerCompetency, UUID } from "../../domain/competency/repositories/contracts";
-import { AuthorizationError, InvalidCompetencyTransitionError, VerificationRequiredError } from "./errors";
+import { AssessmentRepository, CompetencyRepository, EvidenceRepository, LearnerCompetency, UUID } from "../../domain/competency/repositories/contracts.js";
+import { AuthorizationError, InvalidCompetencyTransitionError, VerificationRequiredError } from "./errors.js";
 export interface CompetencyAuthorizationPort { isAuthorizedAssessor(userId:UUID,organisationId:UUID):Promise<boolean>; }
 export interface CompetencyTransaction { run<T>(work:()=>Promise<T>):Promise<T>; }
 

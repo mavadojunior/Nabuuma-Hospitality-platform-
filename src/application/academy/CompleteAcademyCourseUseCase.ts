@@ -1,20 +1,20 @@
 import type {
   AcademyCertificate,
   AcademyRepository,
-} from "../../domain/academy";
+} from "../../domain/academy/index.js";
 import type {
   UUID,
-} from "../../domain/competency/repositories/contracts";
+} from "../../domain/competency/repositories/contracts.js";
 import type {
   PgAuditRepository,
-} from "../../infrastructure/database/repositories/PgAuditRepository";
+} from "../../infrastructure/database/repositories/PgAuditRepository.js";
 import type {
   PgExecutionContext,
   PgTransactionManager,
-} from "../../infrastructure/database/transaction";
+} from "../../infrastructure/database/transaction.js";
 import type {
   TokenClaims,
-} from "../../infrastructure/security/security";
+} from "../../infrastructure/security/security.js";
 
 export class CompleteAcademyCourseUseCase {
   constructor(

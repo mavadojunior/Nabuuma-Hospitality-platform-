@@ -1,0 +1,124 @@
+-- Read-only approved-target postcondition manifest.
+-- Run only after independently authorised migrations. Any failed assertion aborts.
+BEGIN READ ONLY;
+SET LOCAL search_path = pg_catalog;
+DO $verify$
+DECLARE
+  runtime_role pg_roles%ROWTYPE;
+  auth_owner_role pg_roles%ROWTYPE;
+  revoke_owner_role pg_roles%ROWTYPE;
+  verifier_owner text;
+  verifier_definer boolean;
+  verifier_config text[];
+  resolver_owner text;
+  resolver_definer boolean;
+  resolver_config text[];
+  identity_owner text;
+  identity_force_rls boolean;
+  resolver_public_execute boolean;
+  revoke_resolver_owner text;
+  revoke_resolver_definer boolean;
+  revoke_resolver_config text[];
+  revoke_function_owner text;
+  revoke_function_definer boolean;
+  revoke_function_config text[];
+  revoke_trigger_owner text;
+  revoke_trigger_definer boolean;
+  revoke_trigger_config text[];
+  audit_kind "char";
+  audit_partition_key text;
+  audit_pk text[];
+  audit_default_count integer;
+  audit_month_count integer;
+  audit_rls boolean;
+  audit_force_rls boolean;
+  audit_id_default text;
+  audit_correlation_nullable boolean;
+  audit_entity_notnull boolean;
+  audit_outcome_notnull boolean;
+  audit_trigger_count integer;
+  audit_policy_count integer;
+  audit_index_count integer;
+  audit_fk_count integer;
+  audit_invalid_rows bigint;
+  audit_orphan_rows bigint;
+BEGIN
+  SELECT * INTO STRICT runtime_role FROM pg_roles WHERE rolname='nabuuma_runtime';
+  SELECT * INTO STRICT auth_owner_role FROM pg_roles WHERE rolname='nabuuma_auth_owner';
+  SELECT * INTO STRICT revoke_owner_role FROM pg_roles WHERE rolname='nabuuma_certificate_revoke_owner';
+  IF runtime_role.rolsuper OR runtime_role.rolbypassrls OR runtime_role.rolcreaterole OR runtime_role.rolcreatedb OR runtime_role.rolreplication OR NOT runtime_role.rolcanlogin OR runtime_role.rolinherit THEN RAISE EXCEPTION 'runtime has elevated/incorrect role attributes'; END IF;
+  IF auth_owner_role.rolcanlogin OR auth_owner_role.rolsuper OR auth_owner_role.rolcreatedb OR auth_owner_role.rolcreaterole OR auth_owner_role.rolreplication OR auth_owner_role.rolbypassrls OR auth_owner_role.rolinherit THEN RAISE EXCEPTION '00021 auth owner role attributes unsafe'; END IF;
+  IF revoke_owner_role.rolcanlogin OR revoke_owner_role.rolsuper OR revoke_owner_role.rolcreatedb OR revoke_owner_role.rolcreaterole OR revoke_owner_role.rolreplication OR revoke_owner_role.rolbypassrls OR revoke_owner_role.rolinherit THEN RAISE EXCEPTION '00019 revoke owner role attributes unsafe'; END IF;
+  IF NOT has_schema_privilege('nabuuma_runtime','nabuuma','USAGE') THEN RAISE EXCEPTION '00020 runtime schema USAGE missing'; END IF;
+  IF NOT has_function_privilege('nabuuma_runtime','nabuuma.verify_academy_certificate(text)','EXECUTE') THEN RAISE EXCEPTION '00020 runtime verifier EXECUTE missing'; END IF;
+  IF EXISTS (SELECT 1 FROM aclexplode(COALESCE((SELECT proacl FROM pg_proc WHERE oid='nabuuma.verify_academy_certificate(text)'::regprocedure),acldefault('f','nabuuma_auth_owner'::regrole))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') THEN RAISE EXCEPTION '00020 PUBLIC verifier EXECUTE granted'; END IF;
+  IF has_table_privilege('nabuuma_runtime','nabuuma.academy_certificates','SELECT') THEN RAISE EXCEPTION '00020 runtime direct certificate SELECT granted'; END IF;
+  IF pg_has_role('nabuuma_runtime','nabuuma_certificate_verifier','MEMBER') THEN RAISE EXCEPTION '00020 runtime verifier membership granted'; END IF;
+  SELECT pg_get_userbyid(p.proowner),p.prosecdef,p.proconfig INTO STRICT verifier_owner,verifier_definer,verifier_config FROM pg_proc p WHERE p.oid='nabuuma.verify_academy_certificate(text)'::regprocedure;
+  IF verifier_owner <> 'nabuuma_auth_owner' OR NOT verifier_definer OR verifier_config IS NULL OR NOT ('search_path=pg_catalog'=ANY(verifier_config)) THEN RAISE EXCEPTION '00020 verifier owner/security/search_path mismatch'; END IF;
+
+  IF to_regclass('nabuuma.external_identities') IS NULL THEN RAISE EXCEPTION '00021 external_identities missing'; END IF;
+  SELECT pg_get_userbyid(c.relowner),c.relforcerowsecurity INTO STRICT identity_owner,identity_force_rls FROM pg_class c WHERE c.oid='nabuuma.external_identities'::regclass;
+  IF identity_owner <> 'nabuuma_auth_owner' OR NOT identity_force_rls THEN RAISE EXCEPTION '00021 external identity owner/FORCE RLS mismatch'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='nabuuma.external_identities'::regclass AND conname='external_identities_provider_subject_unique' AND contype='u') THEN RAISE EXCEPTION '00021 provider/subject uniqueness missing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='nabuuma.external_identities'::regclass AND conname='external_identities_provider_check' AND contype='c') OR NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='nabuuma.external_identities'::regclass AND conname='external_identities_subject_check' AND contype='c') THEN RAISE EXCEPTION '00021 provider/subject checks missing'; END IF;
+  SELECT pg_get_userbyid(p.proowner),p.prosecdef,p.proconfig INTO STRICT resolver_owner,resolver_definer,resolver_config FROM pg_proc p WHERE p.oid='nabuuma.resolve_external_identity(text,text,uuid)'::regprocedure;
+  IF resolver_owner <> 'nabuuma_auth_owner' OR NOT resolver_definer OR resolver_config IS NULL OR NOT ('search_path=pg_catalog'=ANY(resolver_config)) THEN RAISE EXCEPTION '00021 resolver owner/security/search_path mismatch'; END IF;
+  IF NOT has_function_privilege('nabuuma_runtime','nabuuma.resolve_external_identity(text,text,uuid)','EXECUTE') THEN RAISE EXCEPTION '00021 runtime resolver EXECUTE missing'; END IF;
+  IF has_table_privilege('nabuuma_runtime','nabuuma.external_identities','SELECT') OR has_table_privilege('nabuuma_runtime','nabuuma.organisation_memberships','SELECT') THEN RAISE EXCEPTION '00021 runtime direct identity/membership SELECT granted'; END IF;
+  IF pg_has_role('nabuuma_runtime','nabuuma_auth_owner','MEMBER') OR pg_has_role('nabuuma_app','nabuuma_auth_owner','MEMBER') THEN RAISE EXCEPTION '00021 runtime/app membership in auth owner granted'; END IF;
+  SELECT EXISTS (SELECT 1 FROM aclexplode(COALESCE((SELECT proacl FROM pg_proc WHERE oid='nabuuma.resolve_external_identity(text,text,uuid)'::regprocedure),acldefault('f','nabuuma_auth_owner'::regrole))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') INTO resolver_public_execute;
+  IF resolver_public_execute THEN RAISE EXCEPTION '00021 PUBLIC resolver EXECUTE granted'; END IF;
+
+  SELECT pg_get_userbyid(p.proowner),p.prosecdef,p.proconfig INTO STRICT revoke_function_owner,revoke_function_definer,revoke_function_config FROM pg_proc p WHERE p.oid='nabuuma.revoke_academy_certificate(text,text)'::regprocedure;
+  IF revoke_function_owner <> 'nabuuma_certificate_revoke_owner' OR NOT revoke_function_definer OR revoke_function_config IS NULL OR NOT ('search_path=pg_catalog'=ANY(revoke_function_config)) THEN RAISE EXCEPTION '00019 revocation function owner/security/search_path mismatch'; END IF;
+  IF NOT has_function_privilege('nabuuma_app','nabuuma.revoke_academy_certificate(text,text)','EXECUTE') OR has_function_privilege('nabuuma_runtime','nabuuma.revoke_academy_certificate(text,text)','EXECUTE') OR has_function_privilege('nabuuma_certificate_verifier','nabuuma.revoke_academy_certificate(text,text)','EXECUTE') THEN RAISE EXCEPTION '00019 revocation function grants mismatch'; END IF;
+  IF has_schema_privilege('nabuuma_certificate_revoke_owner','nabuuma','CREATE') THEN RAISE EXCEPTION '00019 revocation owner retains schema CREATE'; END IF;
+  IF has_table_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificates','SELECT') OR has_table_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificate_revocations','SELECT') OR has_table_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificate_revocations','INSERT') THEN RAISE EXCEPTION '00019 revocation owner has broad table privileges'; END IF;
+  IF NOT has_column_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificates','learner_id','SELECT') OR NOT has_column_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificate_revocations','certificate_id','SELECT') OR NOT has_column_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificate_revocations','reason','INSERT') THEN RAISE EXCEPTION '00019 revocation column grants incomplete'; END IF;
+  IF has_column_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificates','metadata','SELECT') OR has_column_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificate_revocations','reason','SELECT') OR has_column_privilege('nabuuma_certificate_revoke_owner','nabuuma.academy_certificate_revocations','created_at','INSERT') THEN RAISE EXCEPTION '00019 revocation owner has excessive column grants'; END IF;
+  SELECT pg_get_userbyid(p.proowner),p.prosecdef,p.proconfig INTO STRICT revoke_trigger_owner,revoke_trigger_definer,revoke_trigger_config FROM pg_proc p WHERE p.oid='nabuuma.prevent_certificate_revocation_mutation()'::regprocedure;
+  IF revoke_trigger_owner <> 'nabuuma_certificate_revoke_owner' OR revoke_trigger_definer OR revoke_trigger_config IS NULL OR NOT ('search_path=pg_catalog'=ANY(revoke_trigger_config)) THEN RAISE EXCEPTION '00019 revocation trigger owner/security/search_path mismatch'; END IF;
+
+  SELECT pg_get_userbyid(p.proowner),p.prosecdef,p.proconfig INTO STRICT revoke_resolver_owner,revoke_resolver_definer,revoke_resolver_config FROM pg_proc p WHERE p.oid='nabuuma.resolve_certificate_id_for_revocation(text)'::regprocedure;
+  IF revoke_resolver_owner <> 'nabuuma_certificate_revoke_owner' OR NOT revoke_resolver_definer OR revoke_resolver_config IS NULL OR NOT ('search_path=pg_catalog'=ANY(revoke_resolver_config)) THEN RAISE EXCEPTION '00022 revocation resolver authority mismatch'; END IF;
+  IF NOT has_function_privilege('nabuuma_app','nabuuma.resolve_certificate_id_for_revocation(text)','EXECUTE') THEN RAISE EXCEPTION '00022 app resolver EXECUTE missing'; END IF;
+  IF EXISTS (SELECT 1 FROM aclexplode(COALESCE((SELECT proacl FROM pg_proc WHERE oid='nabuuma.resolve_certificate_id_for_revocation(text)'::regprocedure),acldefault('f','nabuuma_certificate_revoke_owner'::regrole))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') THEN RAISE EXCEPTION '00022 PUBLIC resolver EXECUTE granted'; END IF;
+
+  SELECT c.relkind,pg_get_partkeydef(c.oid),c.relrowsecurity,c.relforcerowsecurity INTO STRICT audit_kind,audit_partition_key,audit_rls,audit_force_rls FROM pg_class c WHERE c.oid='nabuuma.audit_events'::regclass;
+  IF audit_kind <> 'p' OR audit_partition_key <> 'RANGE (occurred_at)' THEN RAISE EXCEPTION '00022 audit_events partition key mismatch'; END IF;
+  IF NOT audit_rls OR NOT audit_force_rls THEN RAISE EXCEPTION '00022 audit RLS/FORCE RLS missing'; END IF;
+  SELECT array_agg(a.attname ORDER BY k.ordinality) INTO audit_pk FROM pg_constraint c JOIN unnest(c.conkey) WITH ORDINALITY k(attnum,ordinality) ON true JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.attnum WHERE c.conrelid='nabuuma.audit_events'::regclass AND c.contype='p';
+  IF audit_pk IS DISTINCT FROM ARRAY['id','occurred_at']::text[] THEN RAISE EXCEPTION '00022 audit composite PK mismatch'; END IF;
+  SELECT pg_get_expr(d.adbin,d.adrelid) INTO audit_id_default FROM pg_attrdef d JOIN pg_attribute a ON a.attrelid=d.adrelid AND a.attnum=d.adnum WHERE d.adrelid='nabuuma.audit_events'::regclass AND a.attname='id';
+  IF audit_id_default IS NULL OR audit_id_default NOT LIKE '%gen_random_uuid%' THEN RAISE EXCEPTION '00022 audit id default mismatch'; END IF;
+  SELECT NOT attnotnull INTO audit_correlation_nullable FROM pg_attribute WHERE attrelid='nabuuma.audit_events'::regclass AND attname='correlation_id';
+  SELECT attnotnull INTO audit_entity_notnull FROM pg_attribute WHERE attrelid='nabuuma.audit_events'::regclass AND attname='entity_id';
+  SELECT attnotnull INTO audit_outcome_notnull FROM pg_attribute WHERE attrelid='nabuuma.audit_events'::regclass AND attname='outcome';
+  IF NOT audit_correlation_nullable OR NOT audit_entity_notnull OR NOT audit_outcome_notnull THEN RAISE EXCEPTION '00022 audit required/nullability contract mismatch'; END IF;
+  SELECT count(*) INTO audit_default_count FROM pg_inherits i JOIN pg_class child ON child.oid=i.inhrelid WHERE i.inhparent='nabuuma.audit_events'::regclass AND pg_get_expr(child.relpartbound,child.oid)='DEFAULT';
+  IF audit_default_count <> 1 THEN RAISE EXCEPTION '00022 DEFAULT partition count mismatch'; END IF;
+  SELECT count(*) INTO audit_month_count FROM pg_inherits i JOIN pg_class child ON child.oid=i.inhrelid WHERE i.inhparent='nabuuma.audit_events'::regclass AND child.relname ~ '^audit_events_[0-9]{4}_[0-9]{2}$';
+  IF audit_month_count <> 24 THEN RAISE EXCEPTION '00022 expected 24 monthly partitions; found %',audit_month_count; END IF;
+  IF EXISTS (SELECT 1 FROM generate_series(date '2026-10-01',date '2028-09-01',interval '1 month') AS months(month_start) WHERE NOT EXISTS (SELECT 1 FROM pg_inherits i JOIN pg_class child ON child.oid=i.inhrelid WHERE i.inhparent='nabuuma.audit_events'::regclass AND child.relname='audit_events_'||to_char(months.month_start,'YYYY_MM'))) THEN RAISE EXCEPTION '00022 monthly partition continuity/names missing'; END IF;
+  SELECT count(*) INTO audit_trigger_count FROM pg_trigger WHERE tgrelid='nabuuma.audit_events'::regclass AND tgname='trg_audit_events_immutable' AND NOT tgisinternal;
+  IF audit_trigger_count <> 1 THEN RAISE EXCEPTION '00022 append-only trigger missing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid='nabuuma.audit_events'::regclass AND tgname='trg_audit_events_immutable' AND NOT tgisinternal AND tgtype=27 AND tgfoid='nabuuma.reject_audit_event_mutation()'::regprocedure) THEN RAISE EXCEPTION '00022 append-only trigger definition mismatch'; END IF;
+  SELECT count(*) INTO audit_policy_count FROM pg_policies WHERE schemaname='nabuuma' AND tablename='audit_events' AND policyname IN ('audit_events_tenant_select','audit_events_tenant_insert') AND roles=ARRAY['nabuuma_app']::name[];
+  IF audit_policy_count <> 2 THEN RAISE EXCEPTION '00022 canonical tenant policies/roles missing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='nabuuma' AND tablename='audit_events' AND policyname='audit_events_tenant_select' AND cmd='SELECT' AND roles=ARRAY['nabuuma_app']::name[] AND qual='((organisation_id = nabuuma.current_app_organisation_id()) AND (nabuuma.current_app_user_id() IS NOT NULL) AND nabuuma.is_active_member(organisation_id, nabuuma.current_app_user_id()))' AND with_check IS NULL) THEN RAISE EXCEPTION '00022 canonical tenant SELECT policy definition mismatch'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='nabuuma' AND tablename='audit_events' AND policyname='audit_events_tenant_insert' AND cmd='INSERT' AND roles=ARRAY['nabuuma_app']::name[] AND qual IS NULL AND with_check='((organisation_id = nabuuma.current_app_organisation_id()) AND (actor_user_id = nabuuma.current_app_user_id()) AND (nabuuma.current_app_user_id() IS NOT NULL) AND nabuuma.is_active_member(organisation_id, nabuuma.current_app_user_id()))') THEN RAISE EXCEPTION '00022 canonical tenant INSERT policy definition mismatch'; END IF;
+  SELECT count(*) INTO audit_index_count FROM pg_indexes WHERE schemaname='nabuuma' AND tablename='audit_events' AND indexname IN ('audit_events_pk','audit_events_actor_time_idx','audit_events_correlation_idx','audit_events_entity_time_idx','audit_events_occurred_at_brin_idx','audit_events_org_time_idx');
+  IF audit_index_count <> 6 THEN RAISE EXCEPTION '00022 canonical audit indexes missing'; END IF;
+  SELECT count(*) INTO audit_fk_count FROM pg_constraint WHERE conrelid='nabuuma.audit_events'::regclass AND contype='f' AND confdeltype='r' AND conname IN ('audit_events_actor_fk','audit_events_organisation_fk');
+  IF audit_fk_count <> 2 THEN RAISE EXCEPTION '00022 audit FK RESTRICT semantics missing'; END IF;
+  SELECT count(*) INTO audit_invalid_rows FROM nabuuma.audit_events WHERE id IS NULL OR organisation_id IS NULL OR actor_user_id IS NULL OR action IS NULL OR length(action)>100 OR entity_type IS NULL OR length(entity_type)>50 OR entity_id IS NULL OR occurred_at IS NULL OR outcome IS NULL OR length(outcome)>20 OR outcome NOT IN ('SUCCESS','FAILURE') OR metadata IS NULL OR jsonb_typeof(metadata)<>'object';
+  SELECT count(*) INTO audit_orphan_rows FROM nabuuma.audit_events a LEFT JOIN nabuuma.organisations o ON o.id=a.organisation_id LEFT JOIN nabuuma.users u ON u.id=a.actor_user_id WHERE o.id IS NULL OR u.id IS NULL;
+  IF audit_invalid_rows <> 0 OR audit_orphan_rows <> 0 THEN RAISE EXCEPTION '00022 audit integrity failed: invalid %, orphan %',audit_invalid_rows,audit_orphan_rows; END IF;
+END;
+$verify$;
+
+-- Record and compare with the approved pre-migration baseline.
+SELECT count(*) AS audit_event_rows, max(occurred_at) AS latest_audit_event FROM nabuuma.audit_events;
+SELECT count(*) AS default_partition_rows FROM nabuuma.audit_events_default;
+COMMIT;

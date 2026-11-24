@@ -3,35 +3,45 @@ import type { Pool } from "pg";
 import {
   createAcademyApplicationServices,
   createTransactionManager,
-} from "./bootstrap";
+} from "./bootstrap.js";
 import {
   closeDatabasePool,
   initializeDatabasePool,
-} from "./infrastructure/database/connection";
+} from "./infrastructure/database/connection.js";
 import {
   PgCertificateVerifier,
-} from "./infrastructure/database/PgCertificateVerifier";
+} from "./infrastructure/database/PgCertificateVerifier.js";
 import {
   PgReadinessProbe,
-} from "./infrastructure/database/PgReadinessProbe";
+} from "./infrastructure/database/PgReadinessProbe.js";
 import {
   BearerRequestAuthenticator,
+  Auth0RequestAuthenticator,
+  ExternalIdentityResolver,
+  PgExternalIdentityRepository,
   JoseJwtVerifier,
-  loadJwtAuthenticationConfig,
-} from "./infrastructure/authentication";
+  loadAuthenticationProviderConfig,
+} from "./infrastructure/authentication/index.js";
+import type {
+  AccessTokenVerifier,
+  VerifiedJwtPayloadVerifier,
+} from "./infrastructure/authentication/JoseJwtVerifier.js";
+import type {
+  JwtAuthenticationConfig,
+} from "./infrastructure/authentication/config.js";
 import {
   createHttpApplication,
-} from "./interfaces/http/app";
+} from "./interfaces/http/app.js";
 import {
   loadRuntimeConfig,
   type RuntimeConfig,
-} from "./runtime-config";
+} from "./runtime-config.js";
 import {
   RuntimeStateMachine,
-} from "./runtime-health-state";
+} from "./runtime-health-state.js";
 import {
   ServerLifecycle,
-} from "./server-lifecycle";
+} from "./server-lifecycle.js";
 
 export interface RuntimeProcess {
   readonly app: FastifyInstance;
@@ -39,9 +49,36 @@ export interface RuntimeProcess {
   readonly config: RuntimeConfig;
 }
 
+export function createRuntimeAuthenticator(
+  authConfig: ReturnType<typeof loadAuthenticationProviderConfig>,
+  pool: Pool,
+  factories: RuntimeFactories = {},
+) {
+  if (authConfig.provider === "SUPABASE") {
+    return new BearerRequestAuthenticator(
+      factories.createVerifier?.(authConfig.jwt) ??
+        new JoseJwtVerifier(authConfig.jwt),
+    );
+  }
+
+  return new Auth0RequestAuthenticator(
+    factories.createAuth0Verifier?.(authConfig.jwt) ??
+      new JoseJwtVerifier(authConfig.jwt),
+    new ExternalIdentityResolver(
+      new PgExternalIdentityRepository(pool),
+    ),
+  );
+}
+
 export interface RuntimeFactories {
   readonly initializePool?: () => Pool;
   readonly closePool?: () => Promise<void>;
+  readonly createVerifier?: (
+    config: JwtAuthenticationConfig,
+  ) => AccessTokenVerifier;
+  readonly createAuth0Verifier?: (
+    config: JwtAuthenticationConfig,
+  ) => VerifiedJwtPayloadVerifier;
 }
 
 export async function createRuntime(
@@ -49,8 +86,8 @@ export async function createRuntime(
   factories: RuntimeFactories = {},
 ): Promise<RuntimeProcess> {
   const config = loadRuntimeConfig(environment);
-  const jwtConfig =
-    loadJwtAuthenticationConfig(environment);
+  const authConfig =
+    loadAuthenticationProviderConfig(environment);
 
   const initializePool =
     factories.initializePool ?? initializeDatabasePool;
@@ -77,10 +114,7 @@ export async function createRuntime(
         transactionManager,
       );
 
-    const authenticator =
-      new BearerRequestAuthenticator(
-        new JoseJwtVerifier(jwtConfig),
-      );
+    const authenticator = createRuntimeAuthenticator(authConfig, pool, factories);
 
     const certificateVerifier =
       new PgCertificateVerifier(pool);

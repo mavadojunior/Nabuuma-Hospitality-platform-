@@ -20,13 +20,6 @@ function createHarness(
       return { rows: [] };
     }
 
-    if (
-      sql ===
-      "SET LOCAL ROLE nabuuma_certificate_verifier"
-    ) {
-      return { rows: [] };
-    }
-
     if (sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [] };
     }
@@ -53,20 +46,15 @@ function createHarness(
 }
 
 describe("PgCertificateVerifier", () => {
-  it("uses only the dedicated verifier database role", async () => {
+  it("uses the runtime connection without switching database roles", async () => {
     const h = createHarness([]);
 
     await h.verifier.verify("NAB-TEST");
 
     expect(h.query).toHaveBeenNthCalledWith(1, "BEGIN");
 
-    expect(h.query).toHaveBeenNthCalledWith(
-      2,
-      "SET LOCAL ROLE nabuuma_certificate_verifier",
-    );
-
     expect(h.query).not.toHaveBeenCalledWith(
-      expect.stringContaining("nabuuma_app"),
+      expect.stringMatching(/^SET (LOCAL )?ROLE /),
     );
 
     expect(h.release).toHaveBeenCalledOnce();
@@ -176,4 +164,44 @@ describe("PgCertificateVerifier", () => {
     expect(query).toHaveBeenCalledWith("ROLLBACK");
     expect(release).toHaveBeenCalledOnce();
   });
+
+  it("discards the client when rollback fails and preserves the original failure", async () => {
+    const operationFailure = new Error("verification failure");
+    const rollbackFailure = new Error("rollback failure");
+
+    const query = vi.fn(async (sql: string) => {
+      if (sql === "BEGIN") {
+        return { rows: [] };
+      }
+
+      if (sql === "SET LOCAL ROLE nabuuma_certificate_verifier") {
+        return { rows: [] };
+      }
+
+      if (sql === "ROLLBACK") {
+        throw rollbackFailure;
+      }
+
+      throw operationFailure;
+    });
+
+    const release = vi.fn();
+    const pool = {
+      connect: vi.fn(async () => ({ query, release })),
+    } as unknown as Pool;
+
+    const verifier = new PgCertificateVerifier(pool);
+
+    await expect(
+      verifier.verify("NAB-TEST"),
+    ).rejects.toBe(operationFailure);
+
+    expect(query).toHaveBeenCalledWith("ROLLBACK");
+    expect(release).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Database rollback failed; connection discarded",
+      }),
+    );
+  });
+
 });

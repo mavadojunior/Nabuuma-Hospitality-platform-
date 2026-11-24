@@ -1,0 +1,56 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: nabuuma-api:local
+    restart: unless-stopped
+    env_file:
+      - runtime.env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+    expose:
+      - "3000"
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      ACME_EMAIL: $ACME_EMAIL
+      NABUUMA_DOMAIN: $NABUUMA_DOMAIN
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - private
+    depends_on:
+      api:
+        condition: service_healthy
+
+networks:
+  private:
+
+volumes:
+  caddy_data:
+  caddy_config:

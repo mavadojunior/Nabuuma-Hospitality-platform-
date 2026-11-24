@@ -1,7 +1,7 @@
-import type { UUID } from "../../../domain/competency/repositories/contracts";
-import { TenantBoundaryViolationError } from "../../../domain/competency/errors";
-import type { PgExecutionContext } from "../transaction";
-import { mapPgError } from "../error-mapping";
+import type { UUID } from "../../../domain/competency/repositories/contracts.js";
+import { TenantBoundaryViolationError } from "../../../domain/competency/errors.js";
+import type { PgExecutionContext } from "../transaction.js";
+import { mapPgError } from "../error-mapping.js";
 
 /**
  * Audit event entity stored in nabuuma.audit_events.
@@ -13,7 +13,7 @@ export interface AuditEvent {
   actorUserId: UUID;
   action: string;
   entityType: string;
-  entityId: UUID | null;
+  entityId: UUID;
   occurredAt: string; // ISO 8601
   correlationId: UUID | null;
   outcome: string;
@@ -28,7 +28,7 @@ export interface CreateAuditEventInput {
   actorUserId: UUID;
   action: string;
   entityType: string;
-  entityId?: UUID | null;
+  entityId: UUID;
   correlationId?: UUID | null;
   outcome: string;
   metadata?: Record<string, unknown>;
@@ -40,7 +40,7 @@ interface AuditEventRow {
   actor_user_id: string;
   action: string;
   entity_type: string;
-  entity_id: string | null;
+  entity_id: string;
   occurred_at: Date | string;
   correlation_id: string | null;
   outcome: string;
@@ -136,7 +136,7 @@ export class PgAuditRepository {
           input.actorUserId,
           input.action,
           input.entityType,
-          input.entityId ?? null,
+          input.entityId,
           input.correlationId ?? null,
           input.outcome,
           JSON.stringify(input.metadata ?? {}),

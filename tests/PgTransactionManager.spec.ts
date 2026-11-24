@@ -120,7 +120,7 @@ describe("PgTransactionManager", () => {
     expect(h.release).toHaveBeenCalledOnce();
   });
 
-  it("releases the connection even if ROLLBACK fails", async () => {
+  it("discards the connection if ROLLBACK fails and preserves the original failure", async () => {
     const workFailure = new Error("work failed");
     const rollbackFailure = new Error("rollback failed");
     const h = makeHarness();
@@ -138,6 +138,10 @@ describe("PgTransactionManager", () => {
       }),
     ).rejects.toBe(workFailure);
 
-    expect(h.release).toHaveBeenCalledOnce();
+    expect(h.release).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Database rollback failed; connection discarded",
+      }),
+    );
   });
 });

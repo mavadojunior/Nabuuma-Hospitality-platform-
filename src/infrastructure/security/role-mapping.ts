@@ -1,4 +1,4 @@
-import type { SecurityRole } from "./security";
+import type { SecurityRole } from "./security.js";
 
 export type PersistenceActorRole =
   | "LEARNER"

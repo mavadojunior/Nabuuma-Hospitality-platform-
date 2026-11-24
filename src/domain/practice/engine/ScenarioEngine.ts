@@ -1,8 +1,8 @@
-import type { TokenClaims } from "../../../infrastructure/security/security";
-import { InvalidLabActionError, LabSessionNotFoundError, LabSessionStateError, ScenarioAuthorizationError, ScenarioNotFoundError } from "./errors";
-import type { ActionContext, ActionResult, LabAction, LabScenario, LabSession, LabSessionRepository, LabTelemetryRepository, ScenarioAuthorizationPort, ScenarioRepository, ScenarioTransaction, ScenarioState, TelemetryAssertion } from "./types";
-import { TelemetryValidator } from "../../measurement/validation/TelemetryValidator";
-import type { CompetencyTransitionPort } from "./types";
+import type { TokenClaims } from "../../../infrastructure/security/security.js";
+import { InvalidLabActionError, LabSessionNotFoundError, LabSessionStateError, ScenarioAuthorizationError, ScenarioNotFoundError } from "./errors.js";
+import type { ActionContext, ActionResult, LabAction, LabScenario, LabSession, LabSessionRepository, LabTelemetryRepository, ScenarioAuthorizationPort, ScenarioRepository, ScenarioTransaction, ScenarioState, TelemetryAssertion } from "./types.js";
+import { TelemetryValidator } from "../../measurement/validation/TelemetryValidator.js";
+import type { CompetencyTransitionPort } from "./types.js";
 
 export class ScenarioEngine {
   constructor(

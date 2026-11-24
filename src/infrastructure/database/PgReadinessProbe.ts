@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import type {
   ReadinessProbe,
-} from "../../interfaces/http/health-routes";
+} from "../../interfaces/http/health-routes.js";
 
 export class PgReadinessProbe implements ReadinessProbe {
   constructor(private readonly pool: Pool) {}
