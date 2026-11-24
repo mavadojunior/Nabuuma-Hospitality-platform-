@@ -99,6 +99,14 @@ describe("non-publishing container certification workflow", () => {
     expect(content).toContain("ARM64_BUILD=VERIFIED");
     expect(content).toContain("OCI_INDEX=VERIFIED");
     expect(content).not.toContain("docker push");
+    expect(content).toContain(
+      '"application/vnd.oci.image.index.v1+json"',
+    );
+    expect(content).toContain(
+      'manifest_blob="blobs/sha256/${manifest_digest#sha256:}"',
+    );
+    expect(content).toContain("/tmp/nabuuma-platform-index.json");
+
   });
 
   it("uses only a disposable database fixture and no production credentials or protected ports", async () => {
