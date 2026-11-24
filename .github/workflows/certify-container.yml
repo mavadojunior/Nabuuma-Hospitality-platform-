@@ -62,12 +62,20 @@ jobs:
           set -euo pipefail
           image="$CERT_IMAGE"
           docker image inspect "$image" > /tmp/nabuuma-image-inspect.json
+          jq '.[0].Config | {
+            User,
+            WorkingDir,
+            Entrypoint,
+            Cmd,
+            NodeEnv: ([.Env[]? | select(. == "NODE_ENV=production")] | first // null)
+          }' /tmp/nabuuma-image-inspect.json
+
           jq -e '
             .[0].Config.User == "nonroot:nonroot" and
             .[0].Config.WorkingDir == "/app" and
             .[0].Config.Entrypoint == ["node"] and
             .[0].Config.Cmd == ["dist/server.js"] and
-            any(.[0].Config.Env[]; . == "NODE_ENV=production")
+            any(.[0].Config.Env[]?; . == "NODE_ENV=production")
           ' /tmp/nabuuma-image-inspect.json >/dev/null
           echo "IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$image")"
           echo "IMAGE_SIZE_BYTES=$(docker image inspect --format '{{.Size}}' "$image")"
