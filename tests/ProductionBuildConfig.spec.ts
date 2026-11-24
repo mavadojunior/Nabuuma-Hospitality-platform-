@@ -42,11 +42,11 @@ describe("release migration gate", () => {
     );
 
     expect(workflow).toContain(
-      "- 55433:5432",
+      "- 55434:5432",
     );
 
     expect(workflow).toContain(
-      'PGPORT: "55433"',
+      'PGPORT: "55434"',
     );
 
     expect(workflow).toContain(
@@ -66,7 +66,7 @@ describe("release migration gate", () => {
     );
 
     expect(workflow).toContain(
-      "postgresql://nabuuma_runtime:nabuuma_ci_runtime@127.0.0.1:55433/nabuuma_rls_test",
+      "postgresql://nabuuma_runtime:nabuuma_ci_runtime@127.0.0.1:55434/nabuuma_rls_test",
     );
 
     expect(workflow).toContain(
@@ -119,7 +119,7 @@ describe("production build configuration", () => {
     );
   });
 
-  it("exposes deterministic build and start commands", async () => {
+  it("exposes deterministic build and canonical fail-closed startup commands", async () => {
     const content = await readFile(
       new URL("../package.json", import.meta.url),
       "utf8",
@@ -134,7 +134,37 @@ describe("production build configuration", () => {
     );
 
     expect(packageJson.scripts?.start).toBe(
-      "node --env-file=.env.production dist/server.js",
+      "bash scripts/start-runtime.sh",
+    );
+
+    const startup = await readFile(
+      new URL("../scripts/start-runtime.sh", import.meta.url),
+      "utf8",
+    );
+
+    expect(startup).toContain(
+      'ENV_FILE="$HOME/.config/nabuuma/runtime.env"',
+    );
+    expect(startup).toContain(
+      'url.port !== "55433"',
+    );
+    expect(startup).toContain(
+      'db !== "nabuuma_rls_test"',
+    );
+    expect(startup).toContain(
+      'user !== "nabuuma_runtime"',
+    );
+    expect(startup).toContain(
+      '[[ ! -L "$ENV_FILE" ]]',
+    );
+    expect(startup).toContain(
+      'runtime_mode="$(stat -c \'%a\' "$ENV_FILE")"',
+    );
+    expect(startup).not.toContain(
+      ".env.production",
+    );
+    expect(startup).toContain(
+      "Refusing startup:",
     );
   });
 });

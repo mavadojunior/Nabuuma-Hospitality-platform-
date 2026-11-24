@@ -12,3 +12,5 @@ runtime.env
 
 # Local command-output and database recovery artifacts
 recovery/
+
+.artifacts/
