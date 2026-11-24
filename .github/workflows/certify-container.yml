@@ -73,7 +73,7 @@ jobs:
           jq -e '
             .[0].Config.User == "nonroot:nonroot" and
             .[0].Config.WorkingDir == "/app" and
-            .[0].Config.Entrypoint == ["node"] and
+            .[0].Config.Entrypoint == ["/nodejs/bin/node"] and
             .[0].Config.Cmd == ["dist/server.js"] and
             any(.[0].Config.Env[]?; . == "NODE_ENV=production")
           ' /tmp/nabuuma-image-inspect.json >/dev/null
