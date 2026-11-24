@@ -71,6 +71,12 @@ describe("non-publishing container certification workflow", () => {
     expect(content).toContain("NONROOT_RUNTIME=VERIFIED");
     expect(content).toContain("READ_ONLY_ROOT_RUNTIME=VERIFIED");
     expect(content).toContain("TMPFS_RUNTIME=VERIFIED");
+    expect(content).toContain(
+      'docker exec "$CERT_APP_CONTAINER" /nodejs/bin/node -e',
+    );
+    expect(content).not.toContain(
+      'docker exec "$CERT_APP_CONTAINER" node -e',
+    );
   });
 
   it("probes SIGTERM shutdown within a bounded deadline and cleans up always", async () => {

@@ -239,7 +239,7 @@ jobs:
           fi
           echo "CONTAINER_HEALTH=HEALTHY"
 
-          docker exec "$CERT_APP_CONTAINER" node -e '
+          docker exec "$CERT_APP_CONTAINER" /nodejs/bin/node -e '
             const fs = require("node:fs");
             let denied = false;
             try { fs.writeFileSync("/app/dist/.nabuuma-certification-write-probe", "probe"); fs.unlinkSync("/app/dist/.nabuuma-certification-write-probe"); }
