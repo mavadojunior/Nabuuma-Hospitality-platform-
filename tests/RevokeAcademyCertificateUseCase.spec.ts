@@ -35,6 +35,7 @@ const claims = {
 } as const satisfies TokenClaims;
 
 const revocation = {
+  certificateId: "44444444-4444-4444-8444-444444444444",
   certificateNumber: "NAB-TEST",
   revokedAt: "2026-10-25T05:00:00.000Z",
   newlyRevoked: true,
@@ -154,6 +155,7 @@ describe("RevokeAcademyCertificateUseCase", () => {
       actorUserId: actorId,
       action: "CERTIFICATE.REVOKE",
       entityType: "ACADEMY_CERTIFICATE",
+      entityId: revocation.certificateId,
       outcome: "SUCCESS",
       metadata: {
         certificateNumber: "NAB-TEST",

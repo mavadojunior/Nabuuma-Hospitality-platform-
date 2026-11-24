@@ -47,8 +47,11 @@ function validateDatabaseUrl(value: string): void {
     throw new Error("Integration tests may connect only to localhost.");
   }
 
-  if (url.port !== "55433") {
-    throw new Error("Integration tests require PostgreSQL port 55433.");
+  const disposablePortAllowed =
+    process.env.NABUUMA_DISPOSABLE_TEST_DATABASE === "1" &&
+    url.port === "55445";
+  if (url.port !== "55434" && !disposablePortAllowed) {
+    throw new Error("Integration tests require approved test port 55434 or explicitly isolated disposable port 55445.");
   }
 
   if (!allowedDatabases.has(database)) {

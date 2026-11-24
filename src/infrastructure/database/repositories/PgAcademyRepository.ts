@@ -173,6 +173,13 @@ export class PgAcademyRepository implements AcademyRepository {
     reason: string,
   ): Promise<AcademyCertificateRevocation> {
     try {
+      const certificateLookup =
+        await this.context.client.query<{ certificate_id: UUID | null }>(
+          `SELECT nabuuma.resolve_certificate_id_for_revocation($1::text) AS certificate_id`,
+          [certificateNumber],
+        );
+      const certificateId = certificateLookup.rows[0]?.certificate_id ?? null;
+
       const result =
         await this.context.client.query<AcademyCertificateRevocationRow>(
           `
@@ -199,7 +206,12 @@ export class PgAcademyRepository implements AcademyRepository {
         );
       }
 
+      if (!certificateId) {
+        throw new Error("Certificate revocation resolved no certificate identity.");
+      }
+
       return {
+        certificateId,
         certificateNumber: row.certificate_number,
         revokedAt: timestamp(row.revoked_at),
         newlyRevoked: row.newly_revoked,

@@ -16,11 +16,15 @@ import {
 } from "./infrastructure/database/PgReadinessProbe.js";
 import {
   BearerRequestAuthenticator,
+  Auth0RequestAuthenticator,
+  ExternalIdentityResolver,
+  PgExternalIdentityRepository,
   JoseJwtVerifier,
-  loadJwtAuthenticationConfig,
+  loadAuthenticationProviderConfig,
 } from "./infrastructure/authentication/index.js";
 import type {
   AccessTokenVerifier,
+  VerifiedJwtPayloadVerifier,
 } from "./infrastructure/authentication/JoseJwtVerifier.js";
 import type {
   JwtAuthenticationConfig,
@@ -45,12 +49,36 @@ export interface RuntimeProcess {
   readonly config: RuntimeConfig;
 }
 
+export function createRuntimeAuthenticator(
+  authConfig: ReturnType<typeof loadAuthenticationProviderConfig>,
+  pool: Pool,
+  factories: RuntimeFactories = {},
+) {
+  if (authConfig.provider === "SUPABASE") {
+    return new BearerRequestAuthenticator(
+      factories.createVerifier?.(authConfig.jwt) ??
+        new JoseJwtVerifier(authConfig.jwt),
+    );
+  }
+
+  return new Auth0RequestAuthenticator(
+    factories.createAuth0Verifier?.(authConfig.jwt) ??
+      new JoseJwtVerifier(authConfig.jwt),
+    new ExternalIdentityResolver(
+      new PgExternalIdentityRepository(pool),
+    ),
+  );
+}
+
 export interface RuntimeFactories {
   readonly initializePool?: () => Pool;
   readonly closePool?: () => Promise<void>;
   readonly createVerifier?: (
     config: JwtAuthenticationConfig,
   ) => AccessTokenVerifier;
+  readonly createAuth0Verifier?: (
+    config: JwtAuthenticationConfig,
+  ) => VerifiedJwtPayloadVerifier;
 }
 
 export async function createRuntime(
@@ -58,8 +86,8 @@ export async function createRuntime(
   factories: RuntimeFactories = {},
 ): Promise<RuntimeProcess> {
   const config = loadRuntimeConfig(environment);
-  const jwtConfig =
-    loadJwtAuthenticationConfig(environment);
+  const authConfig =
+    loadAuthenticationProviderConfig(environment);
 
   const initializePool =
     factories.initializePool ?? initializeDatabasePool;
@@ -86,11 +114,7 @@ export async function createRuntime(
         transactionManager,
       );
 
-    const authenticator =
-      new BearerRequestAuthenticator(
-        factories.createVerifier?.(jwtConfig) ??
-          new JoseJwtVerifier(jwtConfig),
-      );
+    const authenticator = createRuntimeAuthenticator(authConfig, pool, factories);
 
     const certificateVerifier =
       new PgCertificateVerifier(pool);

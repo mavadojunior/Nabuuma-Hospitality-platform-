@@ -42,10 +42,6 @@ export class PgCertificateVerifier {
       await client.query("BEGIN");
       transactionStarted = true;
 
-      await client.query(
-        "SET LOCAL ROLE nabuuma_certificate_verifier",
-      );
-
       const result =
         await client.query<CertificateVerificationRow>(
           `

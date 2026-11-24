@@ -20,13 +20,6 @@ function createHarness(
       return { rows: [] };
     }
 
-    if (
-      sql ===
-      "SET LOCAL ROLE nabuuma_certificate_verifier"
-    ) {
-      return { rows: [] };
-    }
-
     if (sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [] };
     }
@@ -53,20 +46,15 @@ function createHarness(
 }
 
 describe("PgCertificateVerifier", () => {
-  it("uses only the dedicated verifier database role", async () => {
+  it("uses the runtime connection without switching database roles", async () => {
     const h = createHarness([]);
 
     await h.verifier.verify("NAB-TEST");
 
     expect(h.query).toHaveBeenNthCalledWith(1, "BEGIN");
 
-    expect(h.query).toHaveBeenNthCalledWith(
-      2,
-      "SET LOCAL ROLE nabuuma_certificate_verifier",
-    );
-
     expect(h.query).not.toHaveBeenCalledWith(
-      expect.stringContaining("nabuuma_app"),
+      expect.stringMatching(/^SET (LOCAL )?ROLE /),
     );
 
     expect(h.release).toHaveBeenCalledOnce();

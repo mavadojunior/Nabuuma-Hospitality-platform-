@@ -48,6 +48,7 @@ export class RevokeAcademyCertificateUseCase {
           actorUserId: context.claims.subject,
           action: "CERTIFICATE.REVOKE",
           entityType: "ACADEMY_CERTIFICATE",
+          entityId: revocation.certificateId,
           outcome: "SUCCESS",
           metadata: {
             certificateNumber:

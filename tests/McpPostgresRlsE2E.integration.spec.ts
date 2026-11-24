@@ -152,9 +152,12 @@ function validateDatabaseUrl(
     );
   }
 
-  if (url.port !== "55433") {
+  const disposablePortAllowed =
+    process.env.NABUUMA_DISPOSABLE_TEST_DATABASE === "1" &&
+    url.port === "55445";
+  if (url.port !== "55434" && !disposablePortAllowed) {
     throw new Error(
-      "Integration tests require PostgreSQL port 55433.",
+      "Integration tests require approved port 55434 or explicitly isolated disposable port 55445.",
     );
   }
 
@@ -171,10 +174,10 @@ function createAdminPool(): Pool {
 
   if (
     !Number.isInteger(port) ||
-    port !== 55433
+    (port !== 55434 && !(process.env.NABUUMA_DISPOSABLE_TEST_DATABASE === "1" && port === 55445))
   ) {
     throw new Error(
-      "Administrative fixture pool requires PostgreSQL port 55433.",
+      "Administrative fixture pool requires PostgreSQL port 55434.",
     );
   }
 

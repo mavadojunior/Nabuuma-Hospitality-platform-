@@ -153,23 +153,34 @@ describe("PgAcademyRepository lesson progress", () => {
 
 describe("PgAcademyRepository certificate revocation", () => {
   it("executes the database-authoritative revocation function", async () => {
-    const h = repositoryWith([
-      {
-        certificate_number: "NAB-TEST",
-        revoked_at: new Date(
-          "2026-10-25T05:00:00.000Z",
-        ),
-        newly_revoked: true,
-      },
-    ]);
+    const query = vi.fn()
+      .mockResolvedValueOnce({
+        rows: [{ certificate_id: "certificate-id" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [{
+          certificate_number: "NAB-TEST",
+          revoked_at: new Date(
+            "2026-10-25T05:00:00.000Z",
+          ),
+          newly_revoked: true,
+        }],
+      });
+    const h = repositoryWith([]);
+    h.query.mockImplementation(query);
 
     const result = await h.repository.revokeCertificate(
       "NAB-TEST",
       "Issued in error",
     );
 
-    const [sql, parameters] = h.query.mock.calls[0]!;
+    const [resolverSql, resolverParameters] = query.mock.calls[0]!;
+    const [sql, parameters] = query.mock.calls[1]!;
 
+    expect(resolverSql).toContain(
+      "resolve_certificate_id_for_revocation",
+    );
+    expect(resolverParameters).toEqual(["NAB-TEST"]);
     expect(sql).toContain(
       "FROM nabuuma.revoke_academy_certificate",
     );
@@ -179,6 +190,7 @@ describe("PgAcademyRepository certificate revocation", () => {
     ]);
 
     expect(result).toEqual({
+      certificateId: "certificate-id",
       certificateNumber: "NAB-TEST",
       revokedAt: "2026-10-25T05:00:00.000Z",
       newlyRevoked: true,

@@ -7,8 +7,16 @@
     "test:security": "vitest run",
     "test": "npm run test:security",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node --env-file=.env.production dist/server.js",
-    "verify:esm-imports": "node scripts/verify-esm-imports.mjs"
+    "start": "bash scripts/start-runtime.sh",
+    "verify:esm-imports": "node scripts/verify-esm-imports.mjs",
+    "test:release:zero-skip": "node scripts/run-zero-skip-tests.mjs",
+    "test:release:external-identity": "node scripts/test-external-identity-postgres.mjs",
+    "test:release:auth0-http": "node scripts/test-auth0-http-postgres.mjs",
+    "test:release:audit-postgres": "node scripts/test-audit-ledger-postgres.mjs",
+    "verify:release": "node scripts/verify-release.mjs",
+    "verify:backup-restore": "bash scripts/verify-backup-restore.sh",
+    "probe:postgres-provider": "node scripts/probe-postgres-provider.mjs",
+    "test:release:academy-e2e": "node scripts/test-academy-learner-e2e-postgres.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

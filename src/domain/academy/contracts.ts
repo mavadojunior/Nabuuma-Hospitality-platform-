@@ -110,6 +110,7 @@ export interface AcademyRepository {
 }
 
 export interface AcademyCertificateRevocation {
+  readonly certificateId: UUID;
   readonly certificateNumber: string;
   readonly revokedAt: string;
   readonly newlyRevoked: boolean;
