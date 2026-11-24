@@ -211,12 +211,32 @@ jobs:
           echo "READINESS_HTTP=200"
           echo "READINESS_RUNTIME=VERIFIED"
 
+          health_deadline=$((SECONDS + 50))
           health_ok=false
-          for attempt in $(seq 1 20); do
-            if [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CERT_APP_CONTAINER")" = healthy ]; then health_ok=true; break; fi
+          while [ "$SECONDS" -lt "$health_deadline" ]; do
+            health_status="$(
+              docker inspect \
+                --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+                "$CERT_APP_CONTAINER"
+            )"
+            if [ "$health_status" = healthy ]; then
+              health_ok=true
+              break
+            fi
+            if [ "$health_status" = unhealthy ]; then
+              docker inspect \
+                --format '{{json .State.Health.Log}}' \
+                "$CERT_APP_CONTAINER"
+              exit 1
+            fi
             sleep 1
           done
-          test "$health_ok" = true
+          if [ "$health_ok" != true ]; then
+            docker inspect \
+              --format 'status={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} log={{json .State.Health.Log}}' \
+              "$CERT_APP_CONTAINER"
+            exit 1
+          fi
           echo "CONTAINER_HEALTH=HEALTHY"
 
           docker exec "$CERT_APP_CONTAINER" node -e '
