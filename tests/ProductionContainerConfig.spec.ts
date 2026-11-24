@@ -45,6 +45,12 @@ describe("production container configuration", () => {
       "http://127.0.0.1:3000/health/live",
     );
     expect(dockerfile).toContain(
+      'CMD ["node", "-e",',
+    );
+    expect(dockerfile).not.toContain(
+      'CMD ["-e",',
+    );
+    expect(dockerfile).toContain(
       'CMD ["dist/server.js"]',
     );
     expect(dockerfile).not.toContain(
