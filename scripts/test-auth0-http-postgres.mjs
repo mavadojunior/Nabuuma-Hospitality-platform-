@@ -12,8 +12,24 @@ import { registerAcademyRoutes } from "../dist/interfaces/http/academy-routes.js
 const databaseUrl = process.env.NABUUMA_AUTH0_DISPOSABLE_DATABASE_URL;
 if (!databaseUrl) throw new Error("NABUUMA_AUTH0_DISPOSABLE_DATABASE_URL required");
 const parsed = new URL(databaseUrl);
-if (!["127.0.0.1", "localhost", "::1"].includes(parsed.hostname) || !(parsed.port === "55434" && parsed.pathname === "/nabuuma_auth0_test" || process.env.NABUUMA_DISPOSABLE_TEST_DATABASE === "1" && parsed.port === "55445" && parsed.pathname === "/nabuuma_rls_test")) {
-  throw new Error("Refusing non-disposable Auth0 integration database target");
+const isLoopback = ["127.0.0.1", "localhost", "::1"].includes(
+  parsed.hostname,
+);
+const isDedicatedCiDatabase =
+  parsed.port === "55434" &&
+  parsed.pathname === "/nabuuma_auth0_test";
+const isSharedDisposableDatabase =
+  process.env.NABUUMA_DISPOSABLE_TEST_DATABASE === "1" &&
+  ["55434", "55445"].includes(parsed.port) &&
+  parsed.pathname === "/nabuuma_rls_test";
+
+if (
+  !isLoopback ||
+  (!isDedicatedCiDatabase && !isSharedDisposableDatabase)
+) {
+  throw new Error(
+    "Refusing non-disposable Auth0 integration database target",
+  );
 }
 const admin = new Pool({ host: process.env.PGHOST ?? "127.0.0.1", port: Number(process.env.PGPORT ?? parsed.port), database: process.env.PGDATABASE ?? parsed.pathname.slice(1), user: process.env.NABUUMA_TEST_ADMIN_USER ?? process.env.PGUSER, password: process.env.PGPASSWORD });
 const runtime = new Pool({ connectionString: databaseUrl, max: 3 });
