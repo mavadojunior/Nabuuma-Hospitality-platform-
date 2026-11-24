@@ -1,0 +1,338 @@
+name: Non-Publishing Container Certification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-certification:
+    name: Native Runtime and Multi-Platform Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CERT_IMAGE: nabuuma-certification:${{ github.sha }}
+      CERT_NETWORK: nabuuma-cert-${{ github.run_id }}
+      CERT_DB_CONTAINER: nabuuma-cert-db-${{ github.run_id }}
+      CERT_APP_CONTAINER: nabuuma-cert-app-${{ github.run_id }}
+      CERT_RESTART_CONTAINER: nabuuma-cert-restart-${{ github.run_id }}
+
+    steps:
+      - name: Checkout certification source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Verify hosted Docker environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker version
+          docker info
+          docker buildx version
+          docker buildx ls
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+
+      - name: Configure QEMU for ARM64 build
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - name: Configure Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build native AMD64 image without publishing
+        id: native-build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          tags: nabuuma-certification:${{ github.sha }}
+          load: true
+          push: false
+          provenance: false
+          sbom: false
+
+      - name: Inspect final image and content boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$CERT_IMAGE"
+          docker image inspect "$image" > /tmp/nabuuma-image-inspect.json
+          jq -e '
+            .[0].Config.User == "nonroot:nonroot" and
+            .[0].Config.WorkingDir == "/app" and
+            .[0].Config.Entrypoint == ["node"] and
+            .[0].Config.Cmd == ["dist/server.js"] and
+            any(.[0].Config.Env[]; . == "NODE_ENV=production")
+          ' /tmp/nabuuma-image-inspect.json >/dev/null
+          echo "IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$image")"
+          echo "IMAGE_SIZE_BYTES=$(docker image inspect --format '{{.Size}}' "$image")"
+          docker image inspect --format 'IMAGE_USER={{.Config.User}} WORKDIR={{.Config.WorkingDir}} ENTRYPOINT={{json .Config.Entrypoint}} CMD={{json .Config.Cmd}}' "$image"
+          docker image inspect --format '{{range .Config.Env}}{{if eq . "NODE_ENV=production"}}IMAGE_NODE_ENV=production{{end}}{{end}}' "$image"
+
+          probe="$(docker create "$image")"
+          trap 'docker rm -f "$probe" >/dev/null 2>&1 || true; rm -f /tmp/nabuuma-image-rootfs.tar /tmp/nabuuma-image-files.txt' EXIT
+          docker export "$probe" -o /tmp/nabuuma-image-rootfs.tar
+          tar -tf /tmp/nabuuma-image-rootfs.tar > /tmp/nabuuma-image-files.txt
+          python3 - <<'PY'
+          from pathlib import PurePosixPath
+          names = [line.lstrip("./") for line in open("/tmp/nabuuma-image-files.txt", encoding="utf-8")]
+          forbidden_roots = {".git", ".artifacts", "tests", "backups", "nabuuma-backups", "coverage"}
+          bad_roots = sorted({name.split("/", 1)[0] for name in names if name.split("/", 1)[0] in forbidden_roots})
+          bad_env = sorted(name for name in names if PurePosixPath(name).name.startswith(".env"))
+          bad_dumps = sorted(name for name in names if name.endswith((".dump", ".dump.gz", ".sql.gz", ".bak")))
+          package_managers = sorted(name for name in names if PurePosixPath(name).name in {"npm", "npx", "yarn", "pnpm"} and "/node_modules/" not in name)
+          if bad_roots or bad_env or bad_dumps or package_managers:
+              raise SystemExit(f"forbidden image content: roots={bad_roots}, env={bad_env}, dumps={bad_dumps}, package_managers={package_managers}")
+          print("FINAL_IMAGE_CONTENT=VERIFIED")
+          print("IMAGE_CONTENT_BOUNDARY=VERIFIED")
+          PY
+
+      - name: Create isolated disposable PostgreSQL fixture
+        shell: bash
+        env:
+          CERT_DB_PASSWORD: nabuuma-certification-only
+        run: |
+          set -euo pipefail
+          docker network create "$CERT_NETWORK"
+          docker run --detach \
+            --name "$CERT_DB_CONTAINER" \
+            --network "$CERT_NETWORK" \
+            --network-alias postgres \
+            --restart=no \
+            --memory=512m \
+            --cpus=1 \
+            --env POSTGRES_USER=certifier \
+            --env POSTGRES_PASSWORD="$CERT_DB_PASSWORD" \
+            --env POSTGRES_DB=certification \
+            postgres:18
+          ready=false
+          for attempt in $(seq 1 40); do
+            if docker exec "$CERT_DB_CONTAINER" pg_isready -U certifier -d certification >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+          echo "DISPOSABLE_POSTGRES=READY"
+          echo "DISPOSABLE_DATABASE_PORT=CONTAINER_NETWORK_ONLY"
+
+      - name: Run hardened production container and certify health and filesystem
+        shell: bash
+        env:
+          CERT_DB_PASSWORD: nabuuma-certification-only
+        run: |
+          set -euo pipefail
+          CERT_DB_USER="certifier"
+          CERT_DB_HOST="postgres"
+          CERT_DB_PORT="5432"
+          CERT_DB_NAME="certification"
+          CERT_DATABASE_URL="$(
+            printf '%s%s:%s@%s:%s/%s' \
+              'postgresql://' \
+              "$CERT_DB_USER" \
+              "$CERT_DB_PASSWORD" \
+              "$CERT_DB_HOST" \
+              "$CERT_DB_PORT" \
+              "$CERT_DB_NAME"
+          )"
+          docker run --detach \
+            --name "$CERT_APP_CONTAINER" \
+            --network "$CERT_NETWORK" \
+            --restart=no \
+            --memory=512m \
+            --cpus=1 \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --publish 127.0.0.1:18080:3000 \
+            --env NODE_ENV=production \
+            --env HOST=0.0.0.0 \
+            --env PORT=3000 \
+            --env SHUTDOWN_TIMEOUT_MS=10000 \
+            --env DB_MAX_CONNECTIONS=2 \
+            --env DB_IDLE_TIMEOUT_MS=5000 \
+            --env DB_CONNECTION_TIMEOUT_MS=3000 \
+            --env DATABASE_URL="$CERT_DATABASE_URL" \
+            --env AUTH_PROVIDER=SUPABASE \
+            --env AUTH_JWT_ISSUER=https://certification.invalid/ \
+            --env AUTH_JWT_AUDIENCE=nabuuma-certification \
+            --env AUTH_JWKS_URI=https://certification.invalid/.well-known/jwks.json \
+            "$CERT_IMAGE"
+
+          configured_user="$(docker inspect --format '{{.Config.User}}' "$CERT_APP_CONTAINER")"
+          test "$configured_user" = "nonroot:nonroot"
+          host_pid="$(docker inspect --format '{{.State.Pid}}' "$CERT_APP_CONTAINER")"
+          test "$host_pid" -gt 0
+          effective_uid="$(awk '/^Uid:/{print $3}' "/proc/$host_pid/status")"
+          effective_gid="$(awk '/^Gid:/{print $3}' "/proc/$host_pid/status")"
+          test "$effective_uid" -gt 0
+          echo "EFFECTIVE_UID=$effective_uid"
+          echo "EFFECTIVE_GID=$effective_gid"
+          echo "NONROOT_RUNTIME=VERIFIED"
+
+          docker inspect --format 'READONLY_ROOT={{.HostConfig.ReadonlyRootfs}} TMPFS={{json .HostConfig.Tmpfs}} CAP_DROP={{json .HostConfig.CapDrop}} SECURITY_OPT={{json .HostConfig.SecurityOpt}}' "$CERT_APP_CONTAINER"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$CERT_APP_CONTAINER")" = true
+          docker inspect --format '{{json .HostConfig.Tmpfs}}' "$CERT_APP_CONTAINER" | grep -q '"/tmp"'
+          docker inspect --format '{{json .HostConfig.CapDrop}}' "$CERT_APP_CONTAINER" | grep -q 'ALL'
+          docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$CERT_APP_CONTAINER" | grep -q 'no-new-privileges:true'
+
+          live_ok=false
+          for attempt in $(seq 1 40); do
+            status="$(curl --silent --show-error --output /tmp/nabuuma-live.json --write-out '%{http_code}' http://127.0.0.1:18080/health/live || true)"
+            if [ "$status" = 200 ] && jq -e '.status == "LIVE"' /tmp/nabuuma-live.json >/dev/null 2>&1; then live_ok=true; break; fi
+            sleep 1
+          done
+          test "$live_ok" = true
+          echo "LIVENESS_HTTP=200"
+          echo "LIVENESS_RUNTIME=VERIFIED"
+
+          ready_ok=false
+          for attempt in $(seq 1 20); do
+            status="$(curl --silent --show-error --output /tmp/nabuuma-ready.json --write-out '%{http_code}' http://127.0.0.1:18080/health/ready || true)"
+            if [ "$status" = 200 ] && jq -e '.status == "READY"' /tmp/nabuuma-ready.json >/dev/null 2>&1; then ready_ok=true; break; fi
+            sleep 1
+          done
+          test "$ready_ok" = true
+          echo "READINESS_HTTP=200"
+          echo "READINESS_RUNTIME=VERIFIED"
+
+          health_ok=false
+          for attempt in $(seq 1 20); do
+            if [ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CERT_APP_CONTAINER")" = healthy ]; then health_ok=true; break; fi
+            sleep 1
+          done
+          test "$health_ok" = true
+          echo "CONTAINER_HEALTH=HEALTHY"
+
+          docker exec "$CERT_APP_CONTAINER" node -e '
+            const fs = require("node:fs");
+            let denied = false;
+            try { fs.writeFileSync("/app/dist/.nabuuma-certification-write-probe", "probe"); fs.unlinkSync("/app/dist/.nabuuma-certification-write-probe"); }
+            catch (error) { if (error && error.code === "EROFS") denied = true; else throw error; }
+            if (!denied) throw new Error("read-only root did not reject application-directory write with EROFS");
+            const path = "/tmp/nabuuma-certification-write-probe";
+            fs.writeFileSync(path, "tmpfs-ok");
+            fs.unlinkSync(path);
+            process.stdout.write("ROOT_WRITE_DENIAL=VERIFIED TMPFS_RUNTIME=VERIFIED\n");
+          '
+          echo "READ_ONLY_STARTUP=VERIFIED"
+          echo "READ_ONLY_ROOT_RUNTIME=VERIFIED"
+
+      - name: Verify SIGTERM graceful shutdown
+        shell: bash
+        run: |
+          set -euo pipefail
+          started_at="$(date +%s)"
+          docker kill --signal=TERM "$CERT_APP_CONTAINER" >/dev/null
+          stopped=false
+          for attempt in $(seq 1 30); do
+            running="$(docker inspect --format '{{.State.Running}}' "$CERT_APP_CONTAINER")"
+            if [ "$running" = false ]; then stopped=true; break; fi
+            sleep 1
+          done
+          test "$stopped" = true
+          elapsed="$(( $(date +%s) - started_at ))"
+          exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$CERT_APP_CONTAINER")"
+          test "$exit_code" = 0
+          docker logs "$CERT_APP_CONTAINER" 2>&1 | grep -Fq '[DB] Database pool closed successfully'
+          echo "SIGTERM_EXIT_CODE=$exit_code"
+          echo "SIGTERM_DURATION_SECONDS=$elapsed"
+          echo "SIGTERM_CLEAN_SHUTDOWN=VERIFIED"
+          echo "GRACEFUL_SHUTDOWN_RUNTIME=VERIFIED"
+
+      - name: Verify clean restart from the same image
+        shell: bash
+        env:
+          CERT_DB_PASSWORD: nabuuma-certification-only
+        run: |
+          set -euo pipefail
+          CERT_DB_USER="certifier"
+          CERT_DB_HOST="postgres"
+          CERT_DB_PORT="5432"
+          CERT_DB_NAME="certification"
+          CERT_DATABASE_URL="$(
+            printf '%s%s:%s@%s:%s/%s' \
+              'postgresql://' \
+              "$CERT_DB_USER" \
+              "$CERT_DB_PASSWORD" \
+              "$CERT_DB_HOST" \
+              "$CERT_DB_PORT" \
+              "$CERT_DB_NAME"
+          )"
+          docker run --detach \
+            --name "$CERT_RESTART_CONTAINER" \
+            --network "$CERT_NETWORK" \
+            --restart=no \
+            --memory=512m \
+            --cpus=1 \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --publish 127.0.0.1:18081:3000 \
+            --env NODE_ENV=production \
+            --env HOST=0.0.0.0 \
+            --env PORT=3000 \
+            --env SHUTDOWN_TIMEOUT_MS=10000 \
+            --env DB_MAX_CONNECTIONS=2 \
+            --env DB_IDLE_TIMEOUT_MS=5000 \
+            --env DB_CONNECTION_TIMEOUT_MS=3000 \
+            --env DATABASE_URL="$CERT_DATABASE_URL" \
+            --env AUTH_PROVIDER=SUPABASE \
+            --env AUTH_JWT_ISSUER=https://certification.invalid/ \
+            --env AUTH_JWT_AUDIENCE=nabuuma-certification \
+            --env AUTH_JWKS_URI=https://certification.invalid/.well-known/jwks.json \
+            "$CERT_IMAGE"
+          healthy=false
+          for attempt in $(seq 1 30); do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18081/health/live || true)"
+            if [ "$status" = 200 ]; then healthy=true; break; fi
+            sleep 1
+          done
+          test "$healthy" = true
+          docker kill --signal=TERM "$CERT_RESTART_CONTAINER" >/dev/null
+          stopped=false
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect --format '{{.State.Running}}' "$CERT_RESTART_CONTAINER")" = false ]; then stopped=true; break; fi
+            sleep 1
+          done
+          test "$stopped" = true
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$CERT_RESTART_CONTAINER")" = 0
+          echo "CLEAN_RESTART_RUNTIME=VERIFIED"
+
+      - name: Build AMD64 and ARM64 OCI image without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --file Dockerfile \
+            --platform linux/amd64,linux/arm64 \
+            --output type=oci,dest=/tmp/nabuuma-multiarch.oci.tar \
+            --provenance=false \
+            --sbom=false \
+            .
+          test -s /tmp/nabuuma-multiarch.oci.tar
+          tar -xOf /tmp/nabuuma-multiarch.oci.tar index.json > /tmp/nabuuma-oci-index.json
+          jq -e '[.manifests[].platform | select(.os == "linux" and (.architecture == "amd64" or .architecture == "arm64"))] | map(.architecture) | unique | sort == ["amd64", "arm64"]' /tmp/nabuuma-oci-index.json >/dev/null
+          echo "AMD64_BUILD=VERIFIED"
+          echo "ARM64_BUILD=VERIFIED"
+          echo "OCI_INDEX=VERIFIED"
+          echo "MULTI_PLATFORM_BUILD=VERIFIED"
+
+      - name: Remove only certification containers, network and image
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          docker rm -f "$CERT_APP_CONTAINER" "$CERT_RESTART_CONTAINER" "$CERT_DB_CONTAINER" >/dev/null 2>&1
+          docker network rm "$CERT_NETWORK" >/dev/null 2>&1
+          docker image rm "$CERT_IMAGE" >/dev/null 2>&1
+          rm -f /tmp/nabuuma-multiarch.oci.tar /tmp/nabuuma-oci-index.json /tmp/nabuuma-image-inspect.json /tmp/nabuuma-live.json /tmp/nabuuma-ready.json
+          echo "CERTIFICATION_RESOURCE_CLEANUP=ATTEMPTED"

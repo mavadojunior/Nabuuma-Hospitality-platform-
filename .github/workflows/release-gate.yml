@@ -23,10 +23,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: npm
@@ -62,7 +62,7 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: nabuuma_rls_test
         ports:
-          - 55433:5432
+          - 55434:5432
         options: >-
           --health-cmd "pg_isready -U postgres -d nabuuma_rls_test"
           --health-interval 5s
@@ -71,19 +71,19 @@ jobs:
 
     env:
       PGHOST: 127.0.0.1
-      PGPORT: "55433"
+      PGPORT: "55434"
       PGDATABASE: nabuuma_rls_test
       PGUSER: postgres
       PGPASSWORD: postgres
       RUN_RLS_INTEGRATION: "1"
-      NABUUMA_TEST_DATABASE_URL: postgresql://nabuuma_runtime:nabuuma_ci_runtime@127.0.0.1:55433/nabuuma_rls_test
+      NABUUMA_TEST_DATABASE_URL: postgresql://nabuuma_runtime:nabuuma_ci_runtime@127.0.0.1:55434/nabuuma_rls_test
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: npm
@@ -96,6 +96,31 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Provision constrained runtime login before migrations
+        env:
+          RUNTIME_ROLE: nabuuma_runtime
+          RUNTIME_PASSWORD: nabuuma_ci_runtime
+        run: |
+          set -euo pipefail
+
+          psql \
+            -X \
+            -v ON_ERROR_STOP=1 \
+            --set=runtime_role="$RUNTIME_ROLE" \
+            --set=runtime_password="$RUNTIME_PASSWORD" <<'SQL'
+          SELECT format(
+            'CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD %L',
+            :'runtime_role',
+            :'runtime_password'
+          )
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM pg_roles
+            WHERE rolname = :'runtime_role'
+          )
+          \gexec
+          SQL
 
       - name: Apply canonical migrations
         run: |
@@ -134,30 +159,16 @@ jobs:
             exit 1
           }
 
-      - name: Provision constrained runtime login
+      - name: Grant constrained runtime application role
         env:
           RUNTIME_ROLE: nabuuma_runtime
-          RUNTIME_PASSWORD: nabuuma_ci_runtime
         run: |
           set -euo pipefail
 
           psql \
             -X \
             -v ON_ERROR_STOP=1 \
-            --set=runtime_role="$RUNTIME_ROLE" \
-            --set=runtime_password="$RUNTIME_PASSWORD" <<'SQL'
-          SELECT format(
-            'CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD %L',
-            :'runtime_role',
-            :'runtime_password'
-          )
-          WHERE NOT EXISTS (
-            SELECT 1
-            FROM pg_roles
-            WHERE rolname = :'runtime_role'
-          )
-          \gexec
-
+            --set=runtime_role="$RUNTIME_ROLE" <<'SQL'
           SELECT format(
             'GRANT %I TO %I',
             'nabuuma_app',
@@ -165,6 +176,30 @@ jobs:
           )
           \gexec
           SQL
+
+      - name: Execute approved database postconditions
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f deployment/sql/approved-db-postconditions.sql
+
+      - name: Build release test runtime
+        run: npm run build
+
+      - name: Verify PostgreSQL external identity authority
+        run: node scripts/test-external-identity-postgres.mjs
+
+      - name: Verify Auth0 HTTP PostgreSQL composition
+        env:
+          NABUUMA_TEST_ADMIN_USER: postgres
+          NABUUMA_DISPOSABLE_TEST_DATABASE: "1"
+          NABUUMA_AUTH0_DISPOSABLE_DATABASE_URL: postgresql://nabuuma_runtime:nabuuma_ci_runtime@127.0.0.1:55434/nabuuma_rls_test
+        run: node scripts/test-auth0-http-postgres.mjs
+
+      - name: Verify Academy learner lifecycle PostgreSQL E2E
+        run: node scripts/test-academy-learner-e2e-postgres.mjs
+
+      - name: Verify audit ledger PostgreSQL security and continuity
+        run: node scripts/test-audit-ledger-postgres.mjs
 
       - name: Verify security roles
         run: |
@@ -257,8 +292,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Run complete security suite
-        run: npm run test:security
+      - name: Verify native ESM imports
+        run: npm run verify:esm-imports
+
+      - name: Run release suite and enforce zero skips
+        run: npm run test:release:zero-skip
 
   container:
     name: Production Container
@@ -270,13 +308,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Build production image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: ./Dockerfile
