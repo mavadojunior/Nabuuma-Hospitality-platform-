@@ -74,7 +74,7 @@ describe("release publication workflow", () => {
     expect(scannerJob).toBeDefined();
     expect(scannerJob).toContain("contents: read");
     expect(scannerJob).toContain("fetch-depth: 0");
-    expect(scannerJob).toContain("gitleaks/gitleaks/v8@v8.30.1");
+    expect(scannerJob).toContain("zricethezav/gitleaks/v8@v8.30.1");
     expect(scannerJob).toContain("command -v gitleaks");
     expect(scannerJob).toContain("gitleaks git --redact --exit-code 1 .");
     expect(scannerJob).not.toContain("continue-on-error");
